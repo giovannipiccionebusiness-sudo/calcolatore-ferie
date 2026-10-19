@@ -1,0 +1,14 @@
+FERIE FACILI - AGGIORNAMENTO GITHUB
+
+Carica nella cartella principale (root) del repository:
+index.html
+manifest.webmanifest
+sw.js
+
+Carica nella cartella icons:
+icon-192.png
+icon-512.png
+apple-touch-icon.png
+
+Mantieni la stessa struttura delle cartelle. Non caricare ISTRUZIONI.txt se non necessario.
+Dopo il commit attendi GitHub Pages e riapri il sito. Per aggiornare l’icona sulla schermata Home potrebbe essere necessario rimuovere e reinstallare la PWA.
