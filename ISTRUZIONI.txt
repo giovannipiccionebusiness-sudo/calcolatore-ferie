@@ -1,5 +1,4 @@
-FERIE FACILI - NUOVA GRAFICA
-
-Carica su GitHub i file index.html, manifest.webmanifest, sw.js e la cartella icons/ mantenendo la stessa struttura. Sostituisci i file esistenti e conferma Commit changes.
-
-Se l'app installata mostra ancora la vecchia icona, riaprila online, attendi l'aggiornamento e, se necessario, rimuovi e reinstalla il collegamento alla schermata Home. Prima di rimuovere l'app annota i dati salvati localmente.
+Ferie Facili - aggiornamento grafico corretto.
+Caricare i file e la cartella icons nella radice del repository GitHub, sostituendo quelli esistenti.
+La guida al cedolino ora compare una sola volta e la tabella si adatta allo schermo.
+La grafica è stata migliorata preservando i calcoli originali.
