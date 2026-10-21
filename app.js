@@ -1,6 +1,6 @@
 import {createMultiPageCapture} from './multipage.js?v=22';
 import {createWorkerArchive} from './archive.js?v=19';
-import {createAutoArchiveScanner} from './auto-scan.js?v=19';
+import {createAutoArchiveScanner} from './auto-scan.js?v=23';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=20261021';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
@@ -431,18 +431,23 @@ refreshAdmin=async function(){
  compactList($('auditList'),'Storico delle operazioni');
  compactList($('pendingDocs'),'Documenti da verificare',{collapsible:false});
 };
+async function documentScanStatus(document_id){
+ const {data,error}=await authClient.auth.getSession();if(error||!data.session)throw Error('Accedi nuovamente.');
+ const r=await fetch(SUPABASE_URL+'/functions/v1/document-scan-archive',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+data.session.access_token},body:JSON.stringify({document_id})});const result=await r.json();if(!r.ok)throw Error(result.error||'Archivio scansione non disponibile.');return result;
+}
 async function monthlyStatus(action,document_id){
  const {data,error}=await authClient.auth.getSession();if(error||!data.session)throw Error('Accedi nuovamente.');
  const r=await fetch(SUPABASE_URL+'/functions/v1/monthly-presence-archive',{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+data.session.access_token},body:JSON.stringify({action,document_id})});
  const result=await r.json();if(!r.ok)throw Error(result.error||'Chiusura mensile non disponibile.');return result;
 }
 const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
-const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:openFile,monthlyStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
+const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:openFile,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed())await archive.setWorkers(people);};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const appReady=boot().catch(err);
+
 
 
 
