@@ -1,3 +1,4 @@
+import {appConfirm} from './app-dialog.js?v=26';
 import {createMultiPageCapture} from './multipage.js?v=22';
 import {createWorkerArchive} from './archive.js?v=19';
 import {createAutoArchiveScanner} from './auto-scan.js?v=23';
@@ -173,13 +174,13 @@ function validateUploadSelection(a){
  if(a==='replacement'&&!recent.length)throw new Error('Nessun foglio per questa settimana da sostituire. Usa Aggiorna foglio presenze.');
  return Object.freeze({stage:a,month,week,category:a==='request'?$('docType').value:'presenze',replaces:a==='replacement'?recent[0].id:null,note:a==='request'?$('docNote').value.trim():'',worker_id:session.user.id,site:profile.site});
 }
-function pick(a){
+async function pick(a){
  if(uploading)return;
  if(pendingDraft){showDocuments();renderUploadRecovery();msg('Riprendi o elimina la foto già pronta prima di sceglierne un’altra.');return;}
  try{
   const selected=validateUploadSelection(a);
-  if(a==='final'&&selected.month>=monthNow()&&!confirm('Il mese selezionato è ancora in corso. Il foglio definitivo deve comprendere tutti i giorni del mese. Continuare?'))return;
-  if(a==='final'&&!confirm('Confermi che il foglio è completo per TUTTO il mese e firmato a mano?'))return;
+  if(a==='final'&&selected.month>=monthNow()&&!await appConfirm('Il mese selezionato è ancora in corso. Il foglio definitivo deve comprendere tutti i giorni del mese. Continuare?'))return;
+  if(a==='final'&&!await appConfirm('Confermi che il foglio è completo per TUTTO il mese e firmato a mano?'))return;
   if(selected.category==='congedo_parentale'){clearCameraRetry();clearCameraSelection();showDocuments();multiPage.open(selected).catch(err);return;}
   clearCameraRetry();selectedUpload=selected;rememberCameraSelection(selected);showDocuments();$('docPicker').value='';$('docPicker').click();
  }catch(e){err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});}
@@ -447,6 +448,7 @@ const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed())await archive.setWorkers(people);};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const appReady=boot().catch(err);
+
 
 
 
