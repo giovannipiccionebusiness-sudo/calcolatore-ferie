@@ -1,0 +1,1 @@
+alter table public.documents drop constraint documents_category_check; alter table public.documents add constraint documents_category_check check(category in ('presenze','ferie','rol','legge104','malattia','congedo_parentale'));

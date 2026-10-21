@@ -1,7 +1,7 @@
 export function guideSteps(kind){
  const other=kind==='other';return [
  {title:'Prepara il foglio',text:other?'Compila il modulo cartaceo relativo alla richiesta e firmalo. Per ferie e ROL controlla prima i residui nell’ultimo cedolino.':'Compila lo stesso foglio cartaceo durante tutto il mese. Per il definitivo, controlla che il mese sia completo e il foglio firmato.',target:other?'docType':'month'},
- {title:other?'Scegli il modulo':'Scegli il mese',text:other?'Seleziona Ferie, ROL, Legge 104 oppure Malattia.':'Seleziona il mese a cui si riferisce il foglio, anche se stai caricando in un mese successivo.',target:other?'docType':'month'},
+ {title:other?'Scegli il modulo':'Scegli il mese',text:other?'Seleziona Ferie, ROL, Legge 104, Malattia oppure Congedo parentale. Per il congedo puoi aggiungere più foto e inviarle insieme in un unico PDF.':'Seleziona il mese a cui si riferisce il foglio, anche se stai caricando in un mese successivo.',target:other?'docType':'month'},
  {title:other?'Indica il periodo':'Scegli il venerdì',text:other?'Indica il periodo o una breve nota. Non inserire diagnosi o dettagli sanitari.':'Per un aggiornamento o una sostituzione settimanale seleziona il venerdì della settimana. Per il definitivo mensile questo campo non serve.',target:other?'docNote':'workerWeek'},
  {title:'Avvia il caricamento',text:other?'Premi “Carica modulo firmato”, poi scegli la foto o il PDF.':'Premi “Aggiorna foglio presenze” per l’invio settimanale; “Sostituisci foglio settimanale” per correggere un invio; “Invia foglio definitivo” solo a mese completo.',target:other?'uploadOther':'updateSheet'},
  {title:'Fotografa tutto il foglio',text:'Appoggia il foglio su una superficie scura e uniforme, fuori dalla busta trasparente. Inquadra tutti e quattro i bordi, con buona luce, senza dita sul testo. Puoi anche scegliere una foto o un PDF già salvato.',target:other?'uploadOther':'finalSheet'},
@@ -21,3 +21,4 @@ if(worker&&start){
  start.onclick=()=>{previousFocus=start;index=0;panel.hidden=false;document.body.classList.add('worker-guide-active');render();};back.onclick=()=>{if(index>0){index--;render();}};next.onclick=()=>{if(index<guideSteps(kind).length-1){index++;render();}};close.onclick=stop;select.onchange=()=>{kind=select.value;index=0;render();};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)stop();});
  new MutationObserver(()=>{if(worker.classList.contains('hidden')||document.getElementById('docsApp')?.classList.contains('hidden'))stop();}).observe(document.getElementById('docsApp'),{attributes:true,subtree:true,attributeFilter:['class']});
 }
+

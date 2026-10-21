@@ -1,3 +1,4 @@
+import {createMultiPageCapture} from './multipage.js?v=21';
 import {createWorkerArchive} from './archive.js?v=19';
 import {createAutoArchiveScanner} from './auto-scan.js?v=19';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=20261021';
@@ -8,7 +9,7 @@ const configured=SUPABASE_URL.startsWith('https://')&&SUPABASE_ANON_KEY.length>2
 let authClient=null,sb=null,profile=null,session=null,docs=[],people=[],missing=[];
 const safe=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateLabel=s=>new Date(s).toLocaleString('it-IT');
-const typeLabel={presenze:'Foglio presenze',ferie:'Ferie',rol:'ROL',legge104:'Legge 104',malattia:'Malattia'};
+const typeLabel={presenze:'Foglio presenze',ferie:'Ferie',rol:'ROL',legge104:'Legge 104',malattia:'Malattia',congedo_parentale:'Congedo parentale'};
 const stageLabel={weekly:'Aggiornamento settimanale',replacement:'Sostituzione settimanale',final:'Definitivo mensile',request:'Modulo firmato'};
 const statusLabel={pending:'In verifica',verified:'Documento verificato',rejected:'Documento respinto'};
 const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -57,7 +58,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
+function showLogged(on){if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
  sb=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{accessToken:async()=>session?.access_token??null,global:{fetch:async(input,init={})=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),String(input?.url||input).includes('/storage/v1/')?120000:20000);try{return await fetchWithUploadProgress(input,{...init,signal:controller.signal})}finally{clearTimeout(timer)}}}});$('setupAlert').classList.add('hidden');
@@ -157,7 +158,7 @@ async function restoreUploadState(){
   try{selectedUpload=validateUploadSelection(saved.stage);}catch{selectedUpload=null;}
   showCameraRetry(saved);
  }
- if(pendingDraft){showDocuments();renderUploadRecovery();}
+ if(pendingDraft){showDocuments();renderUploadRecovery();}else await multiPage.restore(session.user.id);
 }
 const uploadButtons=['updateSheet','replaceSheet','finalSheet','uploadOther'];
 function validateUploadSelection(a){
@@ -179,6 +180,7 @@ function pick(a){
   const selected=validateUploadSelection(a);
   if(a==='final'&&selected.month>=monthNow()&&!confirm('Il mese selezionato è ancora in corso. Il foglio definitivo deve comprendere tutti i giorni del mese. Continuare?'))return;
   if(a==='final'&&!confirm('Confermi che il foglio è completo per TUTTO il mese e firmato a mano?'))return;
+  if(selected.category==='congedo_parentale'){clearCameraRetry();clearCameraSelection();showDocuments();multiPage.open(selected).catch(err);return;}
   clearCameraRetry();selectedUpload=selected;rememberCameraSelection(selected);showDocuments();$('docPicker').value='';$('docPicker').click();
  }catch(e){err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});}
 }
@@ -186,15 +188,14 @@ $('updateSheet').onclick=()=>pick('weekly');$('replaceSheet').onclick=()=>pick('
 function weekEnding(){const d=new Date(),f=new Date(d);f.setDate(d.getDate()+((5-d.getDay()+7)%7));return isoLocalDate(f);}
 
 $('docPicker').onchange=async()=>{
- // Capture the browser's File immediately, even when Auth is still restoring after a reload.
  const file=$('docPicker').files?.[0];if(!file){checkCameraReturn();return;}
- clearCameraRetry();
- await appReady;
- const selected=selectedUpload;
- if(!selected||uploading)return;
+ clearCameraRetry();await appReady;const selected=selectedUpload;if(!selected||uploading)return;
+ try{await acceptUploadFile(file,selected);}catch(e){err(e);}
+};
+async function acceptUploadFile(file,selected){
  const allowed=['image/jpeg','image/png','image/webp','application/pdf'];
- if(!allowed.includes(file.type)||file.size>12*1024*1024){err(new Error('Sono accettati JPEG, PNG, WebP e PDF fino a 12 MB.'));$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});return;}
- if(session?.user?.id!==selected.worker_id||!profile?.active){err(new Error('Account cambiato: seleziona nuovamente il documento.'));return;}
+ if(!allowed.includes(file.type)||file.size>12*1024*1024)throw new Error('Sono accettati JPEG, PNG, WebP e PDF fino a 12 MB.');
+ if(session?.user?.id!==selected.worker_id||!profile?.active)throw new Error('Account cambiato: seleziona nuovamente il documento.');
  const id=crypto.randomUUID(),ext=file.type==='application/pdf'?'pdf':file.type.split('/')[1],path=selected.worker_id+'/'+selected.month+'/'+id+'.'+ext;
  const payload={id,worker_id:selected.worker_id,site:selected.site,month:selected.month,category:selected.category,stage:selected.stage,week_ending:selected.week,replaces:selected.replaces,file_path:path,file_name:file.name,note:selected.note,authorization:['ferie','rol'].includes(selected.category)?'pending':'not_applicable'};
  pendingDraft={worker_id:selected.worker_id,id,path,payload,file};
@@ -204,7 +205,8 @@ $('docPicker').onchange=async()=>{
  await saveUploadDraft(pendingDraft).catch(()=>{});
  clearCameraSelection();
  await sendUploadDraft(pendingDraft);
-};
+}
+
 async function sendUploadDraft(draft){
  if(!draft||uploading||session?.user?.id!==draft.worker_id||!profile?.active)return;
  uploading=true;uploadButtons.forEach(id=>$(id).disabled=true);
@@ -263,9 +265,10 @@ function documentMessage(d,event,status,reason=''){
   ferie:'La richiesta di ferie è stata visionata dal responsabile. È in attesa di autorizzazione.',
   rol:'La richiesta di permessi ROL è stata visionata dal responsabile. È in attesa di autorizzazione.',
   legge104:'La comunicazione dei giorni di legge 104 è stata visionata dal responsabile.',
-  malattia:'La comunicazione dei giorni di malattia è stata visionata dal responsabile.'
+  malattia:'La comunicazione dei giorni di malattia è stata visionata dal responsabile.',
+  congedo_parentale:'La richiesta di congedo parentale è stata visionata dal responsabile.'
  };
- const names={presenze:'Il foglio presenze',ferie:'La richiesta di ferie',rol:'La richiesta di permessi ROL',legge104:'La comunicazione dei giorni di legge 104',malattia:'La comunicazione dei giorni di malattia'};
+ const names={presenze:'Il foglio presenze',ferie:'La richiesta di ferie',rol:'La richiesta di permessi ROL',legge104:'La comunicazione dei giorni di legge 104',malattia:'La comunicazione dei giorni di malattia',congedo_parentale:'La richiesta di congedo parentale'};
  let text;
  if(event==='authorization'){
   const name=d.category==='ferie'?'Le ferie richieste':'I permessi ROL richiesti';
@@ -434,7 +437,9 @@ const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowe
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed())await archive.setWorkers(people);};
+const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,selected);if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const appReady=boot().catch(err);
+
 
 
 
