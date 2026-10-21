@@ -1,4 +1,4 @@
-import {createMultiPageCapture} from './multipage.js?v=21';
+import {createMultiPageCapture} from './multipage.js?v=22';
 import {createWorkerArchive} from './archive.js?v=19';
 import {createAutoArchiveScanner} from './auto-scan.js?v=19';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=20261021';
@@ -185,6 +185,10 @@ function pick(a){
  }catch(e){err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});}
 }
 $('updateSheet').onclick=()=>pick('weekly');$('replaceSheet').onclick=()=>pick('replacement');$('finalSheet').onclick=()=>pick('final');$('uploadOther').onclick=()=>pick('request');
+$('docType').addEventListener('change',()=>{
+ if($('docType').value==='congedo_parentale')pick('request');
+ else multiPage.close();
+});
 function weekEnding(){const d=new Date(),f=new Date(d);f.setDate(d.getDate()+((5-d.getDay()+7)%7));return isoLocalDate(f);}
 
 $('docPicker').onchange=async()=>{
@@ -437,8 +441,9 @@ const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowe
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed())await archive.setWorkers(people);};
-const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,selected);if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
+const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const appReady=boot().catch(err);
+
 
 
 
