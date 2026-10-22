@@ -21,5 +21,12 @@
       "type": "image/png",
       "purpose": "any"
     }
-  ]
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/manifest.webmanifest"
+    }
+  ],
+  "prefer_related_applications": false
 }
