@@ -1,7 +1,7 @@
 {
-  "name": "Ferie Facili — Presenze, ferie e documenti",
-  "short_name": "Ferie Facili",
-  "description": "Calcolatore ferie e ROL, presenze e documenti riservati ai lavoratori.",
+  "name": "Lavoro Facile — Presenze, richieste e documenti",
+  "short_name": "Lavoro Facile",
+  "description": "Presenze, richieste e documenti dei lavoratori, con calcolatore ferie e permessi.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
