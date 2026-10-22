@@ -1,8 +1,10 @@
-import {appConfirm} from './app-dialog.js?v=27';
-import {createMultiPageCapture} from './multipage.js?v=22';
-import {createWorkerArchive} from './archive.js?v=19';
-import {createAutoArchiveScanner} from './auto-scan.js?v=23';
-import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=20261021';
+import {refreshAdminMenu} from './admin-menu.js?v=35';
+import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=35';
+import {appConfirm} from './app-dialog.js?v=35';
+import {createMultiPageCapture} from './multipage.js?v=35';
+import {createWorkerArchive} from './archive.js?v=35';
+import {createAutoArchiveScanner} from './auto-scan.js?v=35';
+import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=35';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 const $=id=>document.getElementById(id);
@@ -59,7 +61,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
+function showLogged(on){if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
  sb=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{accessToken:async()=>session?.access_token??null,global:{fetch:async(input,init={})=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),String(input?.url||input).includes('/storage/v1/')?120000:20000);try{return await fetchWithUploadProgress(input,{...init,signal:controller.signal})}finally{clearTimeout(timer)}}}});$('setupAlert').classList.add('hidden');
@@ -82,7 +84,32 @@ $('loginBtn').onclick=async()=>{
  }catch(e){err(e)}finally{b.disabled=false;b.textContent='Accedi'}
 };
 $('signupBtn').onclick=async()=>{const email=$('email').value.trim(),password=$('password').value;if(!email||password.length<8){msg('Inserisci email e password di almeno 8 caratteri.');return}const full_name=prompt('Inserisci nome e cognome completi:');if(!full_name?.trim())return;const {error}=await authClient.auth.signUp({email,password,options:{data:{full_name:full_name.trim()}}});if(error)err(error);else msg('Registrazione richiesta. Controlla la tua email per confermarla, poi attendi l’abilitazione.')};
-$('logoutBtn').onclick=async()=>{if(uploading){msg('Attendi la fine del caricamento prima di uscire.');return;}clearCameraSelection();clearCameraRetry();uploadStatusPanel?.remove();uploadStatusPanel=null;uploadBar=null;uploadStatusText=null;if(session?.user?.id)await deleteUploadDraft(session.user.id).catch(()=>{});pendingDraft=null;recoveryPanel?.remove();recoveryPanel=null;await authClient.auth.signOut();};
+function missingSession(error){return error?.name==='AuthSessionMissingError'||/auth session missing/i.test(error?.message||'');}
+function finishLogout(message='Accesso terminato.'){
+  session=null;profile=null;docs=[];people=[];missing=[];selectedUpload=null;
+  clearCameraSelection();clearCameraRetry();pendingDraft=null;recoveryPanel?.remove();recoveryPanel=null;
+  uploadStatusPanel?.remove();uploadStatusPanel=null;uploadBar=null;uploadStatusText=null;
+  $('password').value='';$('accountName').textContent='';$('accountInfo').textContent='';
+  for(const id of ['pendingDocs','reviewedDocs','pendingUsers','auditList','deliveryList','docList','myNotifications','adminMobileReviews','adminMobileAuthorizations'])$(id)?.replaceChildren();
+  showLogged(false);msg(message);$('authArea').scrollIntoView({behavior:'smooth',block:'center'});
+
+}
+let signingOut=false;
+$('logoutBtn').onclick=async()=>{
+ if(signingOut)return;
+ if(uploading){msg('Attendi la fine del caricamento prima di uscire.');return;}
+ if(!authClient){msg('Connessione in preparazione. Riprova tra qualche secondo.');return;}
+ signingOut=true;const b=$('logoutBtn');b.disabled=true;b.textContent='Uscita…';msg('Disconnessione in corso…');
+ let timer;
+ try{
+  const worker=profile?.role==='worker'?session?.user?.id:null;
+  // Draft storage must never prevent Auth from signing out (IndexedDB can be blocked).
+  if(worker)deleteUploadDraft(worker).catch(()=>{});
+  const result=await Promise.race([authClient.auth.signOut({scope:'local'}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Disconnessione non completata. Controlla la connessione e riprova.')),10000);})]);
+  if(result?.error&&!missingSession(result.error))throw result.error;
+  finishLogout();
+ }catch(e){err(e);}finally{clearTimeout(timer);signingOut=false;b.disabled=false;b.textContent='Esci';}
+};
 $('month').onchange=refreshWorker;
 
 let selectedUpload=null,uploading=false;
@@ -178,7 +205,7 @@ async function pick(a){
  if(uploading)return;
  if(pendingDraft){showDocuments();renderUploadRecovery();msg('Riprendi o elimina la foto già pronta prima di sceglierne un’altra.');return;}
  try{
-  const selected=validateUploadSelection(a);
+  const selected=validateUploadSelection(a);revealWorkerTarget(a==='request'?$('docType'):$('updateSheet'));
   if(a==='final'&&selected.month>=monthNow()&&!await appConfirm('Il mese selezionato è ancora in corso. Il foglio definitivo deve comprendere tutti i giorni del mese. Continuare?'))return;
   if(a==='final'&&!await appConfirm('Confermi che il foglio è completo per TUTTO il mese e firmato a mano?'))return;
   if(selected.category==='congedo_parentale'){clearCameraRetry();clearCameraSelection();showDocuments();multiPage.open(selected).catch(err);return;}
@@ -238,7 +265,7 @@ async function sendUploadDraft(draft){
   await deleteUploadDraft(draft.worker_id).catch(()=>{});
   pendingDraft=null;clearCameraSelection();renderUploadRecovery();
   showUploadProgress('✓ Documento caricato correttamente · 100%',100,true);
-  msg('Documento inviato correttamente. In attesa di verifica del responsabile.');await refreshWorker();
+  msg('Documento inviato correttamente. In attesa di verifica del responsabile.');await refreshWorker();revealWorkerTarget($('docList'));
  }catch(e){
   showUploadProgress('Invio non completato. Premi Riprendi invio.',null,false,true);renderUploadRecovery();err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});
  }finally{uploadProgressListener=null;uploading=false;uploadButtons.forEach(id=>$(id).disabled=false);}
@@ -257,10 +284,10 @@ async function openFile(d){
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';
  for(const d of docs){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${typeLabel[d.category]} · ${stageLabel[d.stage]}`),node('small',`${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.review_reason)left.append(node('small','Motivo: '+d.review_reason));if(d.authorization==='approved')left.append(node('small','Richiesta autorizzata'));if(d.authorization==='denied')left.append(node('small','Richiesta non autorizzata'));row.append(left,button('Apri',()=>openFile(d),true));area.append(row)}
  const weeks=docs.filter(d=>['weekly','replacement'].includes(d.stage));const finals=docs.filter(d=>d.stage==='final');$('weeklySummary').textContent=`${weeks.length} caricamenti settimanali · ${finals.length? 'Foglio definitivo: '+statusLabel[finals[0].review_status]:'Foglio definitivo non ancora verificato'}`;
- const {data:notes}=await sb.from('notifications').select('*').eq('worker_id',session.user.id).order('created_at',{ascending:false}).limit(30);const n=$('myNotifications');n.replaceChildren();if(!notes?.length)n.textContent='Nessun messaggio.';for(const t of notes||[]){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',t.message),node('small',dateLabel(t.created_at)));row.append(left);if(!t.read_at)row.append(button('Letto',async()=>{await sb.rpc('mark_notification_read',{p_id:t.id});await refreshWorker()},true));n.append(row)}}
+ const {data:notes}=await sb.from('notifications').select('*').eq('worker_id',session.user.id).order('created_at',{ascending:false}).limit(30);const n=$('myNotifications');n.replaceChildren();if(!notes?.length)n.textContent='Nessun messaggio.';for(const t of notes||[]){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',t.message),node('small',dateLabel(t.created_at)));row.append(left);if(!t.read_at)row.append(button('Letto',async()=>{await sb.rpc('mark_notification_read',{p_id:t.id});await refreshWorker()},true));n.append(row)}refreshWorkerMenu(docs,notes||[]);}
 $('adminSite').onchange=()=>refreshAdmin();$('adminMonth').onchange=()=>refreshAdmin();$('refreshAdmin').onclick=()=>refreshAdmin();
 async function refreshAdmin(){if(profile?.role!=='admin')return;const [p,d]=await Promise.all([sb.from('profiles').select('*').order('full_name'),sb.from('documents').select('*').eq('month',$('adminMonth').value).order('created_at',{ascending:false})]);if(p.error||d.error){err(p.error||d.error);return}people=p.data||[];docs=(d.data||[]).filter(x=>!$('adminSite').value||x.site===$('adminSite').value);const active=people.filter(x=>x.active&&x.role==='worker'&&(!$('adminSite').value||x.site===$('adminSite').value));$('adminStats').textContent=`${active.length} lavoratori attivi · ${docs.length} caricamenti nel mese · ${docs.filter(x=>x.review_status==='pending').length} da verificare`;
- const pend=$('pendingDocs'),done=$('reviewedDocs');pend.replaceChildren();done.replaceChildren();for(const d of docs.filter(d=>!docs.some(x=>x.replaces===d.id))){const person=people.find(x=>x.id===d.worker_id),target=d.review_status==='pending'?pend:done,row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${person?.full_name||'Lavoratore'} · ${typeLabel[d.category]}`),node('small',`${stageLabel[d.stage]} · ${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.review_reason)left.append(node('small',d.review_reason));row.append(left);const controls=node('div',null,'doc-toolbar');controls.append(button('Apri',()=>openFile(d),true));if(d.review_status==='pending'){controls.append(button('Verifica',()=>review(d,'verified')),button('Respingi',()=>review(d,'rejected'),true))}else if(d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'){controls.append(button('Autorizza',()=>authorize(d,'approved')),button('Non autorizzare',()=>authorize(d,'denied'),true))}row.append(controls);target.append(row)}if(!pend.childNodes.length)pend.textContent='Nessun documento da verificare.';if(!done.childNodes.length)done.textContent='Nessun documento verificato o respinto.';
+ const pend=$('pendingDocs'),done=$('reviewedDocs');pend.replaceChildren();done.replaceChildren();for(const d of docs.filter(d=>!docs.some(x=>x.replaces===d.id))){const person=people.find(x=>x.id===d.worker_id),target=d.review_status==='pending'?pend:done,row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${person?.full_name||'Lavoratore'} · ${typeLabel[d.category]}`),node('small',`${stageLabel[d.stage]} · ${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.review_reason)left.append(node('small',d.review_reason));row.append(left);const controls=node('div',null,'doc-toolbar');controls.append(button('Apri',()=>openFile(d),true));if(d.review_status==='pending'){controls.append(button('Verifica',()=>review(d,'verified')),button('Respingi',()=>review(d,'rejected'),true))}else if(d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'){controls.append(button('Autorizza',()=>authorize(d,'approved')),button('Non autorizzare',()=>authorize(d,'denied'),true))}row.dataset.adminAction=d.review_status==='pending'?'review':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'?'authorize':'';row.append(controls);target.append(row)}if(!pend.childNodes.length)pend.textContent='Nessun documento da verificare.';if(!done.childNodes.length)done.textContent='Nessun documento verificato o respinto.';
  const users=$('pendingUsers');users.replaceChildren();for(const p of people.filter(x=>!x.active&&x.role==='worker')){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',p.full_name||p.id),node('small',p.id));const select=node('select');select.className='doc-select';for(const [v,label] of [['N153','Corte d’Appello'],['N148','ENAV']]){const opt=node('option',label);opt.value=v;select.append(opt)}const ctl=node('div');ctl.append(select,button('Abilita',async()=>{if(!confirm('Abilitare questo lavoratore per '+select.value+'?'))return;const {error}=await sb.from('profiles').update({active:true,site:select.value}).eq('id',p.id);if(error)err(error);else refreshAdmin()}));row.append(left,ctl);users.append(row)}if(!users.childNodes.length)users.textContent='Nessuna richiesta di registrazione in sospeso.'}
 async function addNotification(worker_id,kind,message,week_ending=null){return sb.from('notifications').insert({worker_id,kind,message,week_ending,created_by:session.user.id})}
 
@@ -345,12 +372,12 @@ refreshAdmin=async function(){
 let drivePanel;
 async function driveCall(action,extra={}){
  const {data,error}=await authClient.auth.getSession();if(error)throw error;
- if(!data.session)throw new Error('Accedi nuovamente.');
+ if(!data.session){finishLogout('Sessione scaduta. Accedi nuovamente.');throw new Error('Sessione scaduta. Accedi nuovamente.');}
  const response=await fetch(SUPABASE_URL+'/functions/v1/drive-archive',{
   method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+data.session.access_token},
   body:JSON.stringify({action,...extra})
  });
- const result=await response.json();if(!response.ok)throw new Error(result.error||'Archivio Drive non disponibile.');
+ const result=await response.json();if(response.status===401){finishLogout('Sessione scaduta. Accedi nuovamente.');throw new Error('Sessione scaduta. Accedi nuovamente.');}if(!response.ok)throw new Error(result.error||'Archivio Drive non disponibile.');
  return result;
 }
 async function refreshDrive(){
@@ -445,9 +472,10 @@ const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
 const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:openFile,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
-refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed())await archive.setWorkers(people);};
+refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed())refreshAdminMenu();}};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const appReady=boot().catch(err);
+
 
 
 

@@ -51,3 +51,4 @@ export function makePDF(jpeg,width,height,original,mime='image/jpeg',landscape=f
  const xref=length;add('xref\n0 8\n0000000000 65535 f \n');for(let i=1;i<=7;i++)add(String(offsets[i]).padStart(10,'0')+' 00000 n \n');add(`trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);return new Blob(parts,{type:'application/pdf'});
 }
 
+

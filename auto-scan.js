@@ -1,7 +1,7 @@
-import {scanPDF} from './pdf-scan.js?v=23';
-import {cleanPaper} from './paper-clean.js?v=19';
-import {edgePaper} from './edge-crop.js?v=19';
-import {detectPaper,warpImage} from './scanner-core.js?v=19';
+import {scanPDF} from './pdf-scan.js?v=35';
+import {cleanPaper} from './paper-clean.js?v=35';
+import {edgePaper} from './edge-crop.js?v=35';
+import {detectPaper,warpImage} from './scanner-core.js?v=35';
 // Colour-preserving deterministic processing. No generated text or OCR.
 export async function autoScanPhoto(blob){
  let image;const url=URL.createObjectURL(blob);
@@ -64,6 +64,7 @@ export function createAutoArchiveScanner({client,allowed,openOriginal,monthlySta
  }
  return {render,clear};
 }
+
 
 
 

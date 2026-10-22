@@ -1,3 +1,4 @@
+import {revealWorkerTarget} from './worker-menu.js?v=35';
 export function guideSteps(kind){
  const other=kind==='other';return [
  {title:'Prepara il foglio',text:other?'Compila il modulo cartaceo relativo alla richiesta e firmalo. Per ferie e ROL controlla prima i residui nell’ultimo cedolino.':'Compila lo stesso foglio cartaceo durante tutto il mese. Per il definitivo, controlla che il mese sia completo e il foglio firmato.',target:other?'docType':'month'},
@@ -16,9 +17,10 @@ if(worker&&start){
  const label=make('label','Cosa vuoi caricare?'),select=make('select');select.id='workerGuideKind';label.htmlFor=select.id;select.className='doc-select';for(const [v,t] of [['presenze','Foglio presenze'],['other','Altri moduli']]){const o=make('option',t);o.value=v;select.append(o);}
  const count=make('p'),title=make('h3'),text=make('p'),controls=make('div');controls.className='worker-guide-controls';const back=make('button','Indietro'),next=make('button','Avanti'),close=make('button','Chiudi guida');for(const b of [back,next,close])b.type='button';count.setAttribute('aria-live','polite');title.tabIndex=-1;panel.append(label,select,count,title,text,controls);controls.append(back,next,close);document.body.append(panel);
  function unmark(){document.querySelectorAll('.worker-guide-target').forEach(e=>e.classList.remove('worker-guide-target'));}
- function render(){const steps=guideSteps(kind),s=steps[index];count.textContent=`Passaggio ${index+1} di ${steps.length}`;title.textContent=s.title;text.textContent=s.text;back.disabled=index===0;next.disabled=index===steps.length-1;unmark();const target=document.getElementById(s.target);if(target){target.classList.add('worker-guide-target');target.scrollIntoView({behavior:'smooth',block:'center'});}title.focus({preventScroll:true});}
+ function render(){const steps=guideSteps(kind),s=steps[index];count.textContent=`Passaggio ${index+1} di ${steps.length}`;title.textContent=s.title;text.textContent=s.text;back.disabled=index===0;next.disabled=index===steps.length-1;unmark();const target=document.getElementById(s.target);if(target){revealWorkerTarget(target);target.classList.add('worker-guide-target');target.scrollIntoView({behavior:'smooth',block:'center'});}title.focus({preventScroll:true});}
  function stop(){panel.hidden=true;unmark();document.body.classList.remove('worker-guide-active');if(previousFocus?.isConnected&&!worker.classList.contains('hidden'))previousFocus.focus({preventScroll:true});}
  start.onclick=()=>{previousFocus=start;index=0;panel.hidden=false;document.body.classList.add('worker-guide-active');render();};back.onclick=()=>{if(index>0){index--;render();}};next.onclick=()=>{if(index<guideSteps(kind).length-1){index++;render();}};close.onclick=stop;select.onchange=()=>{kind=select.value;index=0;render();};document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)stop();});
  new MutationObserver(()=>{if(worker.classList.contains('hidden')||document.getElementById('docsApp')?.classList.contains('hidden'))stop();}).observe(document.getElementById('docsApp'),{attributes:true,subtree:true,attributeFilter:['class']});
 }
+
 

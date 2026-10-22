@@ -1,4 +1,4 @@
-import {makeMultiPDF} from './multipage.js?v=22';
+import {makeMultiPDF} from './multipage.js?v=35';
 // PDF.js renders locally; document bytes are never sent to a conversion service.
 export async function scanPDF(blob,scanPhoto,onProgress=()=>{}){
  const pdfjs=await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs');
@@ -11,3 +11,4 @@ export async function scanPDF(blob,scanPhoto,onProgress=()=>{}){
   }return {file:makeMultiPDF(pages),cropped};
  }finally{await task.destroy();}
 }
+

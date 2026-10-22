@@ -37,3 +37,4 @@ export function setupInstall({window:w=window,document:d=document,navigator:nav=
  return {ready,show,markInstalled};
 }
 if(typeof window!=='undefined'&&typeof document!=='undefined')setupInstall();
+
