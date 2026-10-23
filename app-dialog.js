@@ -13,14 +13,14 @@ export function appConfirm(message){
 
 
 
-export function appNotice(message){
+export function appNotice(message,heading='Riprova più tardi'){
  const existing=document.getElementById('appNotice');
- if(existing){existing.querySelector('p').textContent=message;return;}
+ if(existing){existing.querySelector('p').textContent=message;document.getElementById('appNoticeTitle').textContent=heading;return;}
  const previous=document.activeElement,dialog=document.createElement('dialog');
  dialog.id='appNotice';dialog.className='app-confirm';dialog.setAttribute('aria-labelledby','appNoticeTitle');dialog.setAttribute('aria-describedby','appNoticeMessage');
  const header=document.createElement('div');header.className='app-confirm-brand';
  const image=document.createElement('img');image.src='./icons/icon-192.png';image.alt='';image.width=image.height=48;
- const title=document.createElement('h2');title.id='appNoticeTitle';title.textContent='Riprova più tardi';header.append(image,title);
+ const title=document.createElement('h2');title.id='appNoticeTitle';title.textContent=heading;header.append(image,title);
  const text=document.createElement('p');text.id='appNoticeMessage';text.textContent=message;
  const controls=document.createElement('div');controls.className='app-confirm-actions';
  const close=document.createElement('button');close.type='button';close.textContent='Ho capito';controls.append(close);

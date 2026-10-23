@@ -1,6 +1,6 @@
 import {refreshAdminMenu} from './admin-menu.js?v=35';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=35';
-import {appConfirm,appNotice} from './app-dialog.js?v=36';
+import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
 import {createWorkerArchive} from './archive.js?v=35';
 import {createAutoArchiveScanner} from './auto-scan.js?v=35';
@@ -89,7 +89,19 @@ $('loginBtn').onclick=async()=>{
   if(profile?.active)(profile.role==='admin'?$('adminArea'):$('workerArea')).scrollIntoView({behavior:'smooth',block:'start'});
  }catch(e){err(e)}finally{b.disabled=false;b.textContent='Accedi'}
 };
-$('signupBtn').onclick=async()=>{const email=$('email').value.trim(),password=$('password').value;if(!email||password.length<8){msg('Inserisci email e password di almeno 8 caratteri.');return}const full_name=prompt('Inserisci nome e cognome completi:');if(!full_name?.trim())return;const {error}=await authClient.auth.signUp({email,password,options:{data:{full_name:full_name.trim()}}});if(error)err(error);else msg('Registrazione richiesta. Controlla la tua email per confermarla, poi attendi l’abilitazione.')};
+$('signupBtn').onclick=async()=>{
+ const b=$('signupBtn');if(b.disabled)return;
+ const email=$('email').value.trim(),password=$('password').value;
+ if(!email||password.length<8){msg('Inserisci email e password di almeno 8 caratteri.');return;}
+ const full_name=prompt('Inserisci nome e cognome completi:');if(!full_name?.trim())return;
+ b.disabled=true;b.textContent='Invio richiesta…';
+ try{
+  const {error}=await authClient.auth.signUp({email,password,options:{data:{full_name:full_name.trim()}}});
+  if(error){err(error);return;}
+  const message='Richiesta di registrazione inviata correttamente. Controlla la tua email e conferma la registrazione. Successivamente attendi l’abilitazione da parte del responsabile.';
+  msg(message);appNotice(message,'Richiesta inviata');
+ }catch(e){err(e);}finally{b.disabled=false;b.textContent='Richiedi registrazione';}
+};
 function missingSession(error){return error?.name==='AuthSessionMissingError'||/auth session missing/i.test(error?.message||'');}
 function finishLogout(message='Accesso terminato.'){
   session=null;profile=null;docs=[];people=[];missing=[];selectedUpload=null;
