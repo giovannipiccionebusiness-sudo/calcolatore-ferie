@@ -25,6 +25,9 @@ function err(e){
  if(e?.code==='over_email_send_rate_limit'||/email rate limit exceeded/i.test(text)){
   const message='Al momento non è possibile inviare l’email di conferma perché sono arrivate molte richieste. Riprova più tardi. Evita di premere ripetutamente “Richiedi registrazione”. Se hai già ricevuto un’email di conferma, controlla anche la cartella Spam.';
   msg(message);appNotice(message);
+ }else if(e?.code==='email_not_confirmed'||/email not confirmed/i.test(text)){
+  const message='Devi prima confermare il tuo indirizzo email. Apri il messaggio ricevuto dopo la registrazione e premi il link di conferma. Controlla anche la cartella Spam o Posta indesiderata. Dopo la conferma, torna nell’app e premi Accedi. Se non trovi il messaggio, contatta il responsabile.';
+  msg(message);appNotice(message,'Conferma la tua email');
  }else msg(text);
 }
 function node(tag,text,cls){const el=document.createElement(tag);if(text!=null)el.textContent=text;if(cls)el.className=cls;return el}
