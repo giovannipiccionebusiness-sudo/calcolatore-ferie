@@ -99,7 +99,7 @@ $('signupBtn').onclick=async()=>{
  const full_name=prompt('Inserisci nome e cognome completi:');if(!full_name?.trim())return;
  b.disabled=true;b.textContent='Invio richiesta…';
  try{
-  const {error}=await authClient.auth.signUp({email,password,options:{data:{full_name:full_name.trim()}}});
+  const {error}=await authClient.auth.signUp({email,password,options:{emailRedirectTo:'https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/',data:{full_name:full_name.trim()}}});
   if(error){err(error);return;}
   const message='Richiesta di registrazione inviata correttamente. Controlla la tua email e conferma la registrazione. Successivamente attendi l’abilitazione da parte del responsabile.';
   msg(message);appNotice(message,'Richiesta inviata');
