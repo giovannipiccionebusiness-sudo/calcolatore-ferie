@@ -1,6 +1,6 @@
 import {refreshAdminMenu} from './admin-menu.js?v=35';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=35';
-import {appConfirm} from './app-dialog.js?v=35';
+import {appConfirm,appNotice} from './app-dialog.js?v=36';
 import {createMultiPageCapture} from './multipage.js?v=35';
 import {createWorkerArchive} from './archive.js?v=35';
 import {createAutoArchiveScanner} from './auto-scan.js?v=35';
@@ -20,7 +20,13 @@ const monthNow=()=>isoLocalDate(new Date()).slice(0,7);
 $('month').value=monthNow();$('adminMonth').value=monthNow();
 const today=new Date(), friday=new Date(today);friday.setDate(today.getDate()+((5-today.getDay()+7)%7));$('weekDate').value=isoLocalDate(friday);$('workerWeek').value=$('weekDate').value;
 function msg(t){$('appMsg').textContent=t}
-function err(e){msg(e?.message||String(e))}
+function err(e){
+ const text=e?.message||String(e);
+ if(e?.code==='over_email_send_rate_limit'||/email rate limit exceeded/i.test(text)){
+  const message='Al momento non è possibile inviare l’email di conferma perché sono arrivate molte richieste. Riprova più tardi. Evita di premere ripetutamente “Richiedi registrazione”. Se hai già ricevuto un’email di conferma, controlla anche la cartella Spam.';
+  msg(message);appNotice(message);
+ }else msg(text);
+}
 function node(tag,text,cls){const el=document.createElement(tag);if(text!=null)el.textContent=text;if(cls)el.className=cls;return el}
 function button(label,cb,outline=false){const b=node('button',label,'doc-button'+(outline?' outline':''));b.type='button';b.onclick=cb;return b}
 
