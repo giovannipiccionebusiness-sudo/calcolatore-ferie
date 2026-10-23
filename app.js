@@ -23,11 +23,11 @@ function msg(t){$('appMsg').textContent=t}
 function err(e){
  const text=e?.message||String(e);
  if(e?.code==='over_email_send_rate_limit'||/email rate limit exceeded/i.test(text)){
-  const message='Al momento non è possibile inviare l’email di conferma perché sono arrivate molte richieste. Riprova più tardi. Evita di premere ripetutamente “Richiedi registrazione”. Se hai già ricevuto un’email di conferma, controlla anche la cartella Spam.';
+  const message='Al momento non è possibile completare la richiesta perché sono arrivate molte richieste. Riprova più tardi. Evita di premere ripetutamente “Richiedi registrazione”.';
   msg(message);appNotice(message);
  }else if(e?.code==='email_not_confirmed'||/email not confirmed/i.test(text)){
-  const message='Devi prima confermare il tuo indirizzo email. Apri il messaggio ricevuto dopo la registrazione e premi il link di conferma. Controlla anche la cartella Spam o Posta indesiderata. Dopo la conferma, torna nell’app e premi Accedi. Se non trovi il messaggio, contatta il responsabile.';
-  msg(message);appNotice(message,'Conferma la tua email');
+  const message='Il tuo account non è ancora pronto per l’accesso. Contatta il responsabile per verificare la registrazione e l’abilitazione. Non è necessario inviare una nuova richiesta.';
+  msg(message);appNotice(message,'Accesso non disponibile');
  }else msg(text);
 }
 function node(tag,text,cls){const el=document.createElement(tag);if(text!=null)el.textContent=text;if(cls)el.className=cls;return el}
@@ -101,7 +101,7 @@ $('signupBtn').onclick=async()=>{
  try{
   const {data,error}=await authClient.auth.signUp({email,password,options:{emailRedirectTo:'https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/',data:{full_name:full_name.trim()}}});
   if(error){err(error);return;}
-  const message=data?.session?'Richiesta di registrazione inviata correttamente. Attendi l’abilitazione da parte del responsabile. Dopo l’abilitazione potrai accedere con email e password.':'Richiesta di registrazione inviata correttamente. Controlla la tua email e conferma la registrazione. Successivamente attendi l’abilitazione da parte del responsabile.';
+  const message='Richiesta di registrazione inviata correttamente. Attendi l’abilitazione da parte del responsabile. Dopo l’abilitazione potrai accedere con email e password.';
   if(data?.session){session=data.session;await reloadAccount();}
   msg(message);appNotice(message,'Richiesta inviata');
  }catch(e){err(e);}finally{b.disabled=false;b.textContent='Richiedi registrazione';}
