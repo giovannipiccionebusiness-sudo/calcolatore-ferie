@@ -8,9 +8,10 @@ export function setupOpenedPushNotice(ready){
   if(document.querySelector('dialog[open]')){setTimeout(show,500);return;}
   opening=true;const next=pending;pending=null;let notice=next.notice;
   try{if(next.id&&next.id!=='notifica')notice=await LavoroPushNoticeStore.take(new URL('./',location.href).href,next.id);}catch{}
-  appNotice(notice?.body||'Hai un aggiornamento o un promemoria. Accedi alla tua area personale per consultarlo.',notice?.title||'🔔 Avviso di Lavoro Facile');opening=false;
+  appNotice(notice?.body||'Hai un aggiornamento o un promemoria. Accedi alla tua area personale per consultarlo.',notice?.title||'🔔 Avviso di Lavoro Facile');document.dispatchEvent(new CustomEvent('push-notice-opened',{detail:{eventKey:notice?.eventKey}}));opening=false;
  }
  const initialized=ready.then(show);
  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type!=='OPEN_PUSH_NOTICE')return;pending={id:event.data.id,notice:event.data.notice};initialized.then(show);});
  document.addEventListener('visibilitychange',()=>initialized.then(show));
 }
+
