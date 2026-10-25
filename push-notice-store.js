@@ -1,0 +1,6 @@
+// Shared by the service worker and page; message text never goes in the URL.
+globalThis.LavoroPushNoticeStore={
+ async open(scope){return new Promise((resolve,reject)=>{const r=indexedDB.open('lavoro-facile-notices:'+new URL(scope).pathname,1);r.onupgradeneeded=()=>r.result.createObjectStore('notices',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});},
+ async put(scope,record){const db=await this.open(scope);try{await new Promise((resolve,reject)=>{const tx=db.transaction('notices','readwrite'),store=tx.objectStore('notices');const cursor=store.openCursor();cursor.onsuccess=()=>{const c=cursor.result;if(c){if(c.value.at<Date.now()-86400000) c.delete();c.continue();}};store.put({...record,at:Date.now()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}},
+ async take(scope,id){const db=await this.open(scope);try{return await new Promise((resolve,reject)=>{let result;const tx=db.transaction('notices','readwrite'),store=tx.objectStore('notices'),r=store.get(id);r.onsuccess=()=>{result=r.result;store.delete(id);};tx.oncomplete=()=>resolve(result?.at>Date.now()-86400000?result:null);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}}
+};

@@ -1,4 +1,6 @@
-import {createPushControls} from './push-notifications.js?v=43';
+import {setupOpenedPushNotice} from './push-open-notice.js?v=46';
+import {createAdminMessages} from './admin-messages.js?v=46';
+import {createPushControls} from './push-notifications.js?v=46';
 import {openDocumentCamera} from './live-camera.js?v=42';
 import {refreshAdminMenu} from './admin-menu.js?v=35';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=35';
@@ -72,7 +74,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){queueMicrotask(()=>pushControls.refresh());if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
+function showLogged(on){queueMicrotask(()=>{pushControls.refresh();adminMessages.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
  sb=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{accessToken:async()=>session?.access_token??null,global:{fetch:async(input,init={})=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),String(input?.url||input).includes('/storage/v1/')?120000:20000);try{return await fetchWithUploadProgress(input,{...init,signal:controller.signal})}finally{clearTimeout(timer)}}}});$('setupAlert').classList.add('hidden');
@@ -501,8 +503,9 @@ const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
 const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:openFile,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
-refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed())refreshAdminMenu();}};
+refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);}}};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
+const adminMessages=createAdminMessages({getSession:()=>session,getProfile:()=>profile});
 const pushControls=createPushControls({getSession:()=>session});
 const appReady=boot().catch(err);
 
@@ -515,15 +518,5 @@ const appReady=boot().catch(err);
 
 
 
-// Show the notification only after an explicit tap, including a cold app start.
-let pushNoticePending=new URL(location.href).searchParams.get('avviso')==='notifica';
-if(pushNoticePending){const clean=new URL(location.href);clean.searchParams.delete('avviso');history.replaceState(history.state,'',clean.href);}
-function showOpenedPushNotice(){
- if(!pushNoticePending||document.visibilityState==='hidden')return;
- if(document.querySelector('dialog[open]')){setTimeout(showOpenedPushNotice,500);return;}
- pushNoticePending=false;
- appNotice('Hai un aggiornamento o un promemoria. Consulta le presenze e gli avvisi nella tua area personale. Se non hai ancora effettuato l’accesso, accedi per consultarli.','🔔 Avviso di Lavoro Facile');
-}
-const notificationReady=appReady.then(()=>{showOpenedPushNotice();});
-navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type!=='OPEN_PUSH_NOTICE')return;pushNoticePending=true;notificationReady.then(showOpenedPushNotice);});
-document.addEventListener('visibilitychange',()=>notificationReady.then(showOpenedPushNotice));
+
+setupOpenedPushNotice(appReady);

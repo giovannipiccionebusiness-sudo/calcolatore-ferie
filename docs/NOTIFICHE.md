@@ -1,9 +1,23 @@
-# Notifiche Lavoro Facile
+# Notifiche e messaggi del responsabile
 
-Attivazione volontaria con guida Android/iPhone. Dopo una prova inviata correttamente il riquadro si nasconde e resta Gestisci avvisi. Il simbolo piccolo Android è una sagoma trasparente monocromatica; il logo completo resta nell'immagine della notifica.
+I promemoria automatici restano venerdì alle 17:00 e ultimo giorno del mese alle 18:00, fuso Europe/Rome. Sono inviati solo a lavoratori attivi senza la relativa consegna valida. I testi distinguono aggiornamento settimanale e definitivo mensile completo e firmato.
 
-La funzione app-web-push verifica la sessione per gestire solo la sottoscrizione del proprio dispositivo. Riutilizza il servizio collaudato nelle tabelle test_push_config, test_push_subscriptions e test_push_queue, protette da RLS e senza accesso diretto anon/authenticated. Il dispatcher richiede un token privato server. Le chiavi private non sono nel client o nel repository.
+In Documenti → Gestione e verifiche → Messaggi ai lavoratori, l’amministratore può scegliere tutti, una sede o un lavoratore e inviare un messaggio di servizio (600 caratteri) oppure richiedere il definitivo del mese selezionato, anche prima della fine del mese. L’invio richiede conferma di testo e destinatari. Il definitivo già caricato, anche in verifica e non respinto, esclude il lavoratore dal sollecito. Non vanno anticipate ore non ancora lavorate.
 
-Il cron esistente lavoro-facile-test-push gestisce tutti i dispositivi registrati: venerdì dalle 17:00 alle 20:00 e ultimo giorno del mese dalle 18:00 alle 20:00, fuso Europe/Rome. Controlla i documenti prima della coda e prima dell'invio; coda univoca e massimo tre tentativi. L'avviso di abilitazione riguarda chi attiva le notifiche mentre è ancora in attesa, senza invii retroattivi per account già attivi.
+Le richieste sono accodate al prossimo ciclo del servizio (ogni minuto), con ritentativi limitati. L’esito distingue telefoni accodati, lavoratori raggiungibili, senza notifiche e già in regola. Accodato o accettato dal servizio push non significa letto o consegnato al telefono.
 
-Il payload è generico e il service worker mostra il messaggio e apre il percorso della propria app. I dispositivi ufficiali e test hanno sottoscrizioni distinte, pur usando lo stesso servizio backend. Chi aveva autorizzato il test deve attivare le notifiche anche nell'app ufficiale. L'uscita annulla la sottoscrizione locale. Nessuna notifica è inviata per il solo aggiornamento dell'app.
+L’app sincronizza le chiavi di cifratura dei telefoni già abilitati al prossimo accesso. Non occorre riattivare il consenso. Finché il lavoratore non apre l’app aggiornata, i vecchi dispositivi mantengono i promemoria generici e non sono inclusi negli invii personalizzati. Il testo può apparire sullo schermo bloccato: non inserire dati sanitari o documenti.
+
+Il payload è cifrato aes128gcm con web-push 3.6.7 e VAPID esistente. Il tocco della notifica conserva il testo in IndexedDB per l’avvio dell’app (massimo 24 ore), con identificativo casuale nell’URL; il testo non va nell’URL. Il pop-up mostra il messaggio una volta e lo elimina dalla memoria locale.
+
+## Backend condiviso
+
+Le funzioni app-web-push e test-web-push utilizzano le tabelle protette test_push_* e il job cron esistente. test-web-push esegue il dispatch condiviso. app_scope distingue i dispositivi ufficiali e test: i messaggi manuali sono inviati soltanto a production.
+
+RLS resta attivo senza accesso diretto dei client. L’API verifica bearer con getUser e ruolo/abilitazione in profiles, mai user_metadata. enqueue_admin_push è accessibile solo al service_role e ricontrolla il ruolo. L’accodamento è atomico, con identificativo contro i duplicati e intervallo minimo di un minuto per amministratore. Endpoint ammessi e VAPID privati restano sul server.
+
+I file SQL sono modifiche additive allo schema esistente, non uno schema per un progetto vuoto.
+
+## Verifiche
+
+Destinatari fittizi e rollback: esclusione del definitivo, permessi, selezione destinatari, idempotenza, intervallo tra invii. Test locali: cifratura/decifratura payload, blocco invio per lavoratore, modulo mobile con anteprima e conferma, pop-up con testo esatto e rimozione dopo apertura. Nessun messaggio di prova inviato a lavoratori reali.
