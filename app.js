@@ -1,5 +1,5 @@
 import {setupOpenedPushNotice} from './push-open-notice.js?v=46';
-import {createAdminMessages} from './admin-messages.js?v=46';
+import {createAdminMessages} from './admin-messages.js?v=47';
 import {createPushControls} from './push-notifications.js?v=46';
 import {openDocumentCamera} from './live-camera.js?v=42';
 import {refreshAdminMenu} from './admin-menu.js?v=35';

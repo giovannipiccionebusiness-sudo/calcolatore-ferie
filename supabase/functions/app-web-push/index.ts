@@ -10,7 +10,7 @@ export function notificationText(item:any){
  const month=item.target_month||item.event_key?.split(':')[1]?.slice(0,7)||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()).slice(0,7);
  const label=/^\d{4}-(0[1-9]|1[0-2])$/.test(month)?new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'Europe/Rome'}).format(new Date(month+'-15T12:00:00Z')):'del mese';
  if(item.kind==='weekly')return {title:'Presenze del venerdì',body:'Ti ricordiamo di aggiornare il foglio presenze fino a questa settimana e caricarne una foto leggibile nell’app, usando “Aggiorna foglio presenze”.',month};
- if(item.kind==='monthly')return {title:'Foglio presenze definitivo',body:'Manca il foglio presenze definitivo di '+label+'. Quando è completo e firmato, caricalo nell’app con “Invia foglio definitivo”.',month};
+ if(item.kind==='monthly')return {title:'Foglio presenze definitivo',body:'Caro collaboratore, ti chiedo di completare il foglio presenze di '+label+' fino a fine mese e di caricarlo, firmato, nell’app con “Invia foglio definitivo”. Ti chiedo inoltre di comunicare tempestivamente al responsabile eventuali modifiche successive. Grazie per la collaborazione.',month};
  if(item.kind==='monthly_request')return {title:'Richiesta del definitivo mensile',body:item.message,month};
  if(item.kind==='custom')return {title:'Messaggio dal responsabile',body:item.message};
  if(item.kind==='activation')return {title:'Il tuo account è stato abilitato',body:'Il responsabile ha abilitato il tuo account. Accedi a Lavoro Facile per caricare le presenze e i tuoi documenti.'};
