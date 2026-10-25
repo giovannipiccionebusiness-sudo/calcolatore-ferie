@@ -16,7 +16,7 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  }
  const recheck=()=>{if(document.visibilityState==='visible'&&getSession())refresh();};
  window.addEventListener('focus',recheck);document.addEventListener('visibilitychange',recheck);
- navigator.permissions?.query({name:'notifications'}).then(permission=>permission.addEventListener('change',recheck)).catch(()=>{});
+ try{navigator.permissions?.query?.({name:'notifications'})?.then(permission=>permission.addEventListener?.('change',recheck)).catch(()=>{});}catch{/* Older browsers may not support querying this permission. */}
  const supported=()=>!!window.Notification&&!!navigator.serviceWorker&&'PushManager' in window;
  const ios=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
