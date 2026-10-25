@@ -74,7 +74,7 @@ let manualStorageKey='ferie-facili';const $=id=>document.getElementById(id),fiel
 
 window.addEventListener('leave-account-owner',e=>{manualStorageKey=e.detail?.id?'ferie-facili-user:'+e.detail.id:'ferie-facili';let saved={};try{saved=JSON.parse(localStorage.getItem(manualStorageKey)||'{}');}catch{}fields.forEach(k=>$(k).value=saved[k]||'');update();});
 function openSection(docs){$('docsApp').classList.toggle('hidden',!docs);$('calcApp').classList.toggle('hidden',docs);$('tabDocs').classList.toggle('active',docs);$('tabCalc').classList.toggle('active',!docs)}$('tabDocs').addEventListener('click',()=>openSection(true));$('tabCalc').addEventListener('click',()=>openSection(false));openSection(true);
-</script><script type="module" src="./app.js?v=55"></script><script type="module" src="./worker-guide.js?v=35"></script><script type="module" src="./install-app.js?v=44"></script></body></html>
+</script><script type="module" src="./app.js?v=56"></script><script type="module" src="./worker-guide.js?v=35"></script><script type="module" src="./install-app.js?v=44"></script></body></html>
 
 
 
