@@ -21,7 +21,7 @@ Alla nuova importazione gli utilizzi con data entro il saldo non vengono sottrat
 Il lavoratore seleziona date future e categoria. Sono distinti saldo dell'ultimo report, maturazione successiva, utilizzi, impegni, richiesta aggiuntiva e residuo. Si maturano soltanto mesi conclusi prima della partenza. Ferie e ROL non si compensano; le ex festività restano separate. Dati mancanti o non confermati bloccano il risultato. Il risultato riporta «Saldo previsto sufficiente» oppure la mancanza e «Proiezione indicativa, soggetta a verifica e autorizzazione».
 
 ## Verifica e manutenzione
-Test del motore: `node --experimental-default-type=module tests/leave-core.test.mjs`. Il test SQL di accesso va eseguito in un ambiente amministrativo: usa una transazione e rollback e richiede lo schema applicativo esistente.
+Test del motore: `node tests/leave-core.test.mjs` (Node.js 22 o successivo). Il test SQL di accesso va eseguito in un ambiente amministrativo: usa una transazione e rollback e richiede lo schema applicativo esistente.
 
 Sono verificati precisione, duplicati e sostituzioni, mesi mancanti, settimane a sei giorni, conversioni ore/giorni, aspettative complete e parziali, saldi negativi, attraversamento d'anno, mancata riconciliazione, coperture importate e sovrapposizioni. Verificati anche isolamento account, privilegi amministrativi, accesso/uscita, conservazione del calcolatore manuale e controlli di installazione nell'app completa.
 
