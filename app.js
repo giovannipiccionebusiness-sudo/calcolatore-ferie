@@ -514,3 +514,16 @@ const appReady=boot().catch(err);
 
 
 
+
+// Show the notification only after an explicit tap, including a cold app start.
+let pushNoticePending=new URL(location.href).searchParams.get('avviso')==='notifica';
+if(pushNoticePending){const clean=new URL(location.href);clean.searchParams.delete('avviso');history.replaceState(history.state,'',clean.href);}
+function showOpenedPushNotice(){
+ if(!pushNoticePending||document.visibilityState==='hidden')return;
+ if(document.querySelector('dialog[open]')){setTimeout(showOpenedPushNotice,500);return;}
+ pushNoticePending=false;
+ appNotice('Hai un aggiornamento o un promemoria. Consulta le presenze e gli avvisi nella tua area personale. Se non hai ancora effettuato l’accesso, accedi per consultarli.','🔔 Avviso di Lavoro Facile');
+}
+const notificationReady=appReady.then(()=>{showOpenedPushNotice();});
+navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type!=='OPEN_PUSH_NOTICE')return;pushNoticePending=true;notificationReady.then(showOpenedPushNotice);});
+document.addEventListener('visibilitychange',()=>notificationReady.then(showOpenedPushNotice));
