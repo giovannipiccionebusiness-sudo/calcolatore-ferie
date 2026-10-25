@@ -58,6 +58,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{}}){
  const refreshIfVisible=()=>{if(document.visibilityState==='visible'&&getSession())load(false,dialog.open&&!settingsShown);};window.addEventListener('focus',refreshIfVisible);document.addEventListener('visibilitychange',refreshIfVisible);setInterval(refreshIfVisible,60000);
  document.addEventListener('push-notice-opened',async event=>{if(!getSession())return;try{if(event.detail?.eventKey)await api('read_notice',{eventKey:event.detail.eventKey});await load(true,dialog.open&&!settingsShown);}catch{}});
  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='PUSH_NOTICE_RECEIVED')refreshIfVisible();});
- return {refresh,host:dialog.querySelector('.notification-settings-host'),setControls(value){controller=value;}};
+ return {refresh,openSettings(){if(!getSession())return;if(!dialog.open)dialog.showModal();tab(true);},host:dialog.querySelector('.notification-settings-host'),setControls(value){controller=value;}};
 }
+
 
