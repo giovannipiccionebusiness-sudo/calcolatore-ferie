@@ -3,7 +3,7 @@ const fallbackNotice={title:'Lavoro Facile',body:'Hai un aggiornamento o un prom
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{};}catch{}
  const notice={title:typeof data.title==='string'?data.title.slice(0,100):fallbackNotice.title,eventKey:typeof data.eventKey==='string'?data.eventKey:null,body:typeof data.body==='string'?data.body.slice(0,600):fallbackNotice.body};
- event.waitUntil(Promise.all([self.clients.matchAll({type:'window'}).then(clients=>clients.forEach(c=>c.postMessage({type:'PUSH_NOTICE_RECEIVED'}))),self.registration.showNotification(notice.title,{body:notice.body,icon:new URL('./icons/icon-192.png',self.registration.scope).href,badge:new URL('./icons/notification-badge.png?v=43',self.registration.scope).href,tag:'lavoro-facile-'+String(data.id||'generic'),data:notice})]));
+ event.waitUntil(Promise.all([self.clients.matchAll({type:'window'}).then(clients=>clients.forEach(c=>c.postMessage({type:'PUSH_NOTICE_RECEIVED'}))),self.registration.showNotification(notice.title,{body:notice.body,icon:new URL('./icons/icon-192.png',self.registration.scope).href,badge:new URL('./icons/notification-badge.png?v=43',self.registration.scope).href,tag:'lavoro-facile-'+String(data.id||'generic'),silent:false,vibrate:[150,80,150],renotify:true,data:notice})]));
 });
 self.addEventListener('notificationclick',event=>{
  event.notification.close();const target=self.registration.scope;
@@ -15,4 +15,5 @@ self.addEventListener('notificationclick',event=>{
   const url=new URL(target);url.searchParams.set('avviso',saved?id:'notifica');return self.clients.openWindow(url.href);
  })());
 });
+
 

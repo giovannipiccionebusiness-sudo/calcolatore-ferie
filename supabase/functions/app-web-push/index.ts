@@ -9,6 +9,9 @@ export function validEndpoint(value:string){try{const u=new URL(value);return u.
 export function notificationText(item:any){
  const month=item.target_month||item.event_key?.split(':')[1]?.slice(0,7)||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()).slice(0,7);
  const label=/^\d{4}-(0[1-9]|1[0-2])$/.test(month)?new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'Europe/Rome'}).format(new Date(month+'-15T12:00:00Z')):'del mese';
+ if(item.kind==='admin_registration')return {title:'Account da abilitare',body:'Un account lavoratore è in attesa di abilitazione. Apri la campanella e consulta “Da gestire”.'};
+ if(item.kind==='admin_review')return {title:'Documento da verificare',body:'Hai un documento da verificare. Apri la campanella e consulta “Da gestire”.'};
+ if(item.kind==='admin_authorization')return {title:'Richiesta da autorizzare',body:'Hai una richiesta da autorizzare. Apri la campanella e consulta “Da gestire”.'};
  if(item.kind==='weekly')return {title:'Presenze del venerdì',body:'Ti ricordiamo di aggiornare il foglio presenze fino a questa settimana e caricarne una foto leggibile nell’app, usando “Aggiorna foglio presenze”.',month};
  if(item.kind==='monthly')return {title:'Foglio presenze definitivo',body:'Caro collaboratore, ti chiedo di completare il foglio presenze di '+label+' fino a fine mese e di caricarlo, firmato, nell’app con “Invia foglio definitivo”. Ti chiedo inoltre di comunicare tempestivamente al responsabile eventuali modifiche successive. Grazie per la collaborazione.',month};
  if(item.kind==='monthly_request')return {title:'Richiesta del definitivo mensile',body:item.message,month};
@@ -22,6 +25,14 @@ async function keys(){let row=await config();if(!row.public_key){const pair=awai
 async function stillNeeded(item:any,sub:any){
  const {data:p,error}=await db.from('profiles').select('active,role').eq('id',sub.user_id).single();if(error||!p)return false;
  if(item.kind==='test')return true;
+ if(['admin_registration','admin_review','admin_authorization'].includes(item.kind)){
+  if(!p.active||p.role!=='admin'||sub.app_scope!=='production')return false;
+  const id=item.event_key?.split(':')[1];if(!id)return false;
+  if(item.kind==='admin_registration'){const {data:r,error:e}=await db.from('profiles').select('active,role').eq('id',id).maybeSingle();if(e)throw e;return !!r&&!r.active&&r.role==='worker';}
+  const [{data:d,error:de},{data:replaced,error:re}]=await Promise.all([db.from('documents').select('review_status,category,authorization').eq('id',id).maybeSingle(),db.from('documents').select('id').eq('replaces',id).limit(1)]);
+  if(de||re)throw de||re;if(!d||replaced?.length)return false;
+  return item.kind==='admin_review'?d.review_status==='pending':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending';
+ }
  if(!p.active||p.role!=='worker')return false;
  if(item.kind==='activation'||item.kind==='custom')return true;
  const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()),month=item.kind==='monthly_request'?item.target_month:local.slice(0,7);
@@ -35,8 +46,9 @@ async function send(item:any,row:any){
  if(!validEndpoint(sub.endpoint)||!await stillNeeded(item,sub)){await db.from('test_push_queue').update({state:'skipped'}).eq('id',item.id);return 'skipped';}
  const audience=new URL(sub.endpoint).origin,key=await crypto.subtle.importKey('jwk',row.private_jwk,{name:'ECDSA',namedCurve:'P-256'},false,['sign']);const token=encode({typ:'JWT',alg:'ES256'})+'.'+encode({aud:audience,exp:Math.floor(Date.now()/1000)+3600,sub:'https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/'});const signature=b64(new Uint8Array(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,new TextEncoder().encode(token))));
  // Existing devices keep generic delivery until their next app visit synchronizes encryption keys.
- let headers:any={Authorization:`vapid t=${token}.${signature}, k=${row.public_key}`,TTL:'300',Urgency:'normal'},payload:any;
- if(validKeys(sub.push_keys)){const details=webpush.generateRequestDetails({endpoint:sub.endpoint,keys:sub.push_keys},JSON.stringify({...notificationText(item),id:String(item.id),eventKey:item.event_key}),{TTL:300,urgency:'normal',contentEncoding:'aes128gcm',vapidDetails:{subject:'https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/',publicKey:row.public_key,privateKey:row.private_jwk.d}});headers=details.headers;payload=details.body;}
+ const adminNotice=item.kind.startsWith('admin_'),ttl=adminNotice?3600:300,urgency=adminNotice?'high':'normal';
+ let headers:any={Authorization:`vapid t=${token}.${signature}, k=${row.public_key}`,TTL:String(ttl),Urgency:urgency},payload:any;
+ if(validKeys(sub.push_keys)){const details=webpush.generateRequestDetails({endpoint:sub.endpoint,keys:sub.push_keys},JSON.stringify({...notificationText(item),id:String(item.id),eventKey:item.event_key}),{TTL:ttl,urgency,contentEncoding:'aes128gcm',vapidDetails:{subject:'https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/',publicKey:row.public_key,privateKey:row.private_jwk.d}});headers=details.headers;payload=details.body;}
  const response=await fetch(sub.endpoint,{method:'POST',headers,body:payload,redirect:'error',signal:AbortSignal.timeout(10000)});
  if(response.status===404||response.status===410){await db.from('test_push_subscriptions').delete().eq('id',sub.id);return 'expired';}
  const state=response.ok?'sent':item.attempts>=3?'failed':'pending';await db.from('test_push_queue').update({state,attempted_at:new Date().toISOString()}).eq('id',item.id);return response.ok?'sent':'retry';
@@ -103,6 +115,7 @@ Deno.serve(async req=>{
   const result=await send(item,await keys());return result==='sent'?reply({ok:true}):reply({error:'Notifica non consegnata. Disattiva e riattiva le notifiche, poi riprova.'},502);
  }catch{return reply({error:'Servizio notifiche momentaneamente non disponibile. Riprova più tardi.'},500);}
 });
+
 
 
 

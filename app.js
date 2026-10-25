@@ -2,7 +2,7 @@ import {createAccountMenu} from './account-menu.js?v=50';
 import {createNotificationCenter} from './notification-center.js?v=49';
 import {setupOpenedPushNotice} from './push-open-notice.js?v=48';
 import {createAdminMessages} from './admin-messages.js?v=48';
-import {createPushControls} from './push-notifications.js?v=48';
+import {createPushControls} from './push-notifications.js?v=51';
 import {openDocumentCamera} from './live-camera.js?v=42';
 import {refreshAdminMenu} from './admin-menu.js?v=35';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=35';
@@ -510,7 +510,7 @@ const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.
 const adminMessages=createAdminMessages({getSession:()=>session,getProfile:()=>profile});
 const accountMenu=createAccountMenu({getSession:()=>session});
 const notificationCenter=createNotificationCenter({getSession:()=>session,onOpenTask:openAdminNotificationTask});
-const pushControls=createPushControls({getSession:()=>session,mount:notificationCenter.host});
+const pushControls=createPushControls({getSession:()=>session,mount:notificationCenter.host,getProfile:()=>profile});
 notificationCenter.setControls(pushControls);
 const appReady=boot().catch(err);
 
@@ -545,4 +545,5 @@ async function openAdminNotificationTask(task){
  for(let parent=row.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
  row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
 }
+
 
