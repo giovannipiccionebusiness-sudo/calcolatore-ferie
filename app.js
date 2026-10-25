@@ -1,4 +1,4 @@
-import {createNotificationCenter} from './notification-center.js?v=48';
+import {createNotificationCenter} from './notification-center.js?v=49';
 import {setupOpenedPushNotice} from './push-open-notice.js?v=48';
 import {createAdminMessages} from './admin-messages.js?v=48';
 import {createPushControls} from './push-notifications.js?v=48';
@@ -319,7 +319,7 @@ async function refreshWorker(){if(!profile?.active||profile.role==='admin')retur
  const {data:notes}=await sb.from('notifications').select('*').eq('worker_id',session.user.id).order('created_at',{ascending:false}).limit(30);const n=$('myNotifications');n.replaceChildren();if(!notes?.length)n.textContent='Nessun messaggio.';for(const t of notes||[]){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',t.message),node('small',dateLabel(t.created_at)));row.append(left);if(!t.read_at)row.append(button('Letto',async()=>{await sb.rpc('mark_notification_read',{p_id:t.id});await refreshWorker()},true));n.append(row)}refreshWorkerMenu(docs,notes||[]);}
 $('adminSite').onchange=()=>refreshAdmin();$('adminMonth').onchange=()=>refreshAdmin();$('refreshAdmin').onclick=()=>refreshAdmin();
 async function refreshAdmin(){if(profile?.role!=='admin')return;const [p,d]=await Promise.all([sb.from('profiles').select('*').order('full_name'),sb.from('documents').select('*').eq('month',$('adminMonth').value).order('created_at',{ascending:false})]);if(p.error||d.error){err(p.error||d.error);return}people=p.data||[];docs=(d.data||[]).filter(x=>!$('adminSite').value||x.site===$('adminSite').value);const active=people.filter(x=>x.active&&x.role==='worker'&&(!$('adminSite').value||x.site===$('adminSite').value));$('adminStats').textContent=`${active.length} lavoratori attivi · ${docs.length} caricamenti nel mese · ${docs.filter(x=>x.review_status==='pending').length} da verificare`;
- const pend=$('pendingDocs'),done=$('reviewedDocs');pend.replaceChildren();done.replaceChildren();for(const d of docs.filter(d=>!docs.some(x=>x.replaces===d.id))){const person=people.find(x=>x.id===d.worker_id),target=d.review_status==='pending'?pend:done,row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${person?.full_name||'Lavoratore'} · ${typeLabel[d.category]}`),node('small',`${stageLabel[d.stage]} · ${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.review_reason)left.append(node('small',d.review_reason));row.append(left);const controls=node('div',null,'doc-toolbar');controls.append(button('Apri',()=>openFile(d),true));if(d.review_status==='pending'){controls.append(button('Verifica',()=>review(d,'verified')),button('Respingi',()=>review(d,'rejected'),true))}else if(d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'){controls.append(button('Autorizza',()=>authorize(d,'approved')),button('Non autorizzare',()=>authorize(d,'denied'),true))}row.dataset.adminAction=d.review_status==='pending'?'review':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'?'authorize':'';row.append(controls);target.append(row)}if(!pend.childNodes.length)pend.textContent='Nessun documento da verificare.';if(!done.childNodes.length)done.textContent='Nessun documento verificato o respinto.';
+ const pend=$('pendingDocs'),done=$('reviewedDocs');pend.replaceChildren();done.replaceChildren();for(const d of docs.filter(d=>!docs.some(x=>x.replaces===d.id))){const person=people.find(x=>x.id===d.worker_id),target=d.review_status==='pending'?pend:done,row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${person?.full_name||'Lavoratore'} · ${typeLabel[d.category]}`),node('small',`${stageLabel[d.stage]} · ${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.review_reason)left.append(node('small',d.review_reason));row.append(left);const controls=node('div',null,'doc-toolbar');controls.append(button('Apri',()=>openFile(d),true));if(d.review_status==='pending'){controls.append(button('Verifica',()=>review(d,'verified')),button('Respingi',()=>review(d,'rejected'),true))}else if(d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'){controls.append(button('Autorizza',()=>authorize(d,'approved')),button('Non autorizzare',()=>authorize(d,'denied'),true))}row.dataset.documentId=d.id;row.dataset.adminAction=d.review_status==='pending'?'review':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'?'authorize':'';row.append(controls);target.append(row)}if(!pend.childNodes.length)pend.textContent='Nessun documento da verificare.';if(!done.childNodes.length)done.textContent='Nessun documento verificato o respinto.';
  const users=$('pendingUsers');users.replaceChildren();for(const p of people.filter(x=>!x.active&&x.role==='worker')){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',p.full_name||p.id),node('small',p.id));const select=node('select');select.className='doc-select';for(const [v,label] of [['N153','Corte d’Appello'],['N148','ENAV']]){const opt=node('option',label);opt.value=v;select.append(opt)}const ctl=node('div');ctl.append(select,button('Abilita',async()=>{if(!confirm('Abilitare questo lavoratore per '+select.value+'?'))return;const {error}=await sb.from('profiles').update({active:true,site:select.value}).eq('id',p.id);if(error)err(error);else refreshAdmin()}));row.append(left,ctl);users.append(row)}if(!users.childNodes.length)users.textContent='Nessuna richiesta di registrazione in sospeso.'}
 async function addNotification(worker_id,kind,message,week_ending=null){return sb.from('notifications').insert({worker_id,kind,message,week_ending,created_by:session.user.id})}
 
@@ -370,7 +370,7 @@ refreshAdmin=async function(){
  if(profile?.role!=='admin')return;
  const users=$('pendingUsers');users.replaceChildren();
  for(const p of people.filter(p=>p.role==='worker')){
-  const row=node('div',null,'doc-row'),info=node('div');info.append(node('strong',p.full_name||'Nuova registrazione'),node('small',p.active?'Attivo':'Da abilitare'));
+  const row=node('div',null,'doc-row');row.dataset.workerId=p.id;const info=node('div');info.append(node('strong',p.full_name||'Nuova registrazione'),node('small',p.active?'Attivo':'Da abilitare'));
   const controls=node('div'),site=node('select'),phone=node('input');site.className='doc-select';site.setAttribute('aria-label','Sede di '+p.full_name);
   for(const [v,label] of [['N153',"N153 — Corte d’Appello"],['N148','N148 — ENAV']]){const o=node('option',label);o.value=v;site.append(o)}site.value=p.site||'N153';
   phone.className='doc-input';phone.type='tel';phone.value=p.phone||'';phone.placeholder='WhatsApp, es. 393331234567';phone.setAttribute('aria-label','Numero WhatsApp di '+p.full_name);
@@ -504,10 +504,10 @@ const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
 const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:openFile,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
-refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);}}};
+refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);notificationCenter.refresh(true);}}};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const adminMessages=createAdminMessages({getSession:()=>session,getProfile:()=>profile});
-const notificationCenter=createNotificationCenter({getSession:()=>session});
+const notificationCenter=createNotificationCenter({getSession:()=>session,onOpenTask:openAdminNotificationTask});
 const pushControls=createPushControls({getSession:()=>session,mount:notificationCenter.host});
 notificationCenter.setControls(pushControls);
 const appReady=boot().catch(err);
@@ -524,3 +524,22 @@ const appReady=boot().catch(err);
 
 setupOpenedPushNotice(appReady);
 
+
+
+async function openAdminNotificationTask(task){
+ if(!adminAllowed())throw Error('Accedi come amministratore.');
+ // Switch existing sections without starting duplicate refresh requests.
+ $('docsApp').classList.remove('hidden');$('calcApp').classList.add('hidden');$('tabDocs').classList.add('active');$('tabCalc').classList.remove('active');
+ $('showOperations').click();
+ if(task.month)$('adminMonth').value=task.month;
+ $('adminSite').value=task.site&&[...$('adminSite').options].some(o=>o.value===task.site)?task.site:'';
+ await refreshAdmin();if(!adminAllowed())return;
+ const attribute=task.task_kind==='registration'?'workerId':'documentId';
+ const area=task.task_kind==='registration'?$('pendingUsers'):task.task_kind==='authorization'?($('adminMobileAuthorizations')?.offsetParent?$('adminMobileAuthorizations'):$('reviewedDocs')):($('adminMobileReviews')?.offsetParent?$('adminMobileReviews'):$('pendingDocs'));
+ const row=[...area.querySelectorAll('.doc-row')].find(item=>item.dataset[attribute]===task.target_id);
+ if(!row)throw Error('Questa attività è già stata gestita o sostituita. Aggiorna l’elenco.');
+ // Expand the existing compact list so even an older account can be reached.
+ area.querySelectorAll('.doc-row').forEach(item=>item.hidden=false);
+ for(let parent=row.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
+ row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
+}

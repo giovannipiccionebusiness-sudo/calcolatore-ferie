@@ -54,10 +54,17 @@ Deno.serve(async req=>{
   const bearer=req.headers.get('Authorization')?.replace(/^Bearer /i,'');if(!bearer)return reply({error:'Accedi prima di attivare le notifiche.'},401);
   const {data:{user},error}=await db.auth.getUser(bearer);if(error||!user)return reply({error:'Sessione scaduta. Accedi nuovamente.'},401);
   const {data:profile}=await db.from('profiles').select('active,role').eq('id',user.id).single();if(!profile)return reply({error:'Profilo non disponibile'},403);
+  if(body.action==='admin_tasks'){
+   if(!profile.active||profile.role!=='admin')return reply({error:'Solo l’amministratore può consultare le attività.'},403);
+   const offset=Number.isInteger(body.offset)?body.offset:0;
+   const {data,error:e}=await db.rpc('get_admin_notification_tasks',{actor:user.id,page_offset:offset});if(e)throw e;return reply(data);
+  }
   if(body.action==='inbox'){
    const offset=Math.max(0,Math.min(100000,Number.isInteger(body.offset)?body.offset:0));
    const [{data:items,error:e},{count,error:ce}]=await Promise.all([db.from('app_notifications').select('id,event_key,title,body,kind,created_at,read_at').eq('user_id',user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+29),db.from('app_notifications').select('id',{count:'exact',head:true}).eq('user_id',user.id).is('read_at',null)]);
-   if(e||ce)throw e||ce;return reply({items:items||[],unread:count||0});
+   if(e||ce)throw e||ce;let tasks=null;const isAdmin=profile.active&&profile.role==='admin';
+   if(isAdmin){const {data,error:te}=await db.rpc('get_admin_notification_tasks',{actor:user.id,page_offset:0});if(te)throw te;tasks=data;}
+   return reply({items:items||[],unread:count||0,isAdmin,tasks});
   }
   if(body.action==='read_notice'){
    let query=db.from('app_notifications').update({read_at:new Date().toISOString()}).eq('user_id',user.id).is('read_at',null);
@@ -96,5 +103,6 @@ Deno.serve(async req=>{
   const result=await send(item,await keys());return result==='sent'?reply({ok:true}):reply({error:'Notifica non consegnata. Disattiva e riattiva le notifiche, poi riprova.'},502);
  }catch{return reply({error:'Servizio notifiche momentaneamente non disponibile. Riprova più tardi.'},500);}
 });
+
 
 
