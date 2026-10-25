@@ -3,7 +3,8 @@ export function installPlatform(nav){
  return {apple,android:/Android/i.test(ua),safari:apple&&/Safari/i.test(ua)&&!/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua)};
 }
 export function setupInstall({window:w=window,document:d=document,navigator:nav=navigator}={}){
- const platform=installPlatform(nav),key='lavoro-facile-installed',laterKey='lavoro-facile-install-later',buttons=[...d.querySelectorAll('[data-install-app]')],hints=[...d.querySelectorAll('[data-install-hint]')];
+ const platform=installPlatform(nav),scope=new URL('./',w.location.href).pathname,key='lavoro-facile-installed:'+scope,laterKey='lavoro-facile-install-later:'+scope,buttons=[...d.querySelectorAll('[data-install-app]')],hints=[...d.querySelectorAll('[data-install-hint]')];
+ const remove=(s,k)=>{try{s.removeItem(k)}catch{}};
  const get=(s,k)=>{try{return s.getItem(k)}catch{return null}},set=(s,k,v)=>{try{s.setItem(k,v)}catch{}};
  const media=w.matchMedia('(display-mode: standalone)'),standalone=()=>media.matches||nav.standalone===true||d.referrer.startsWith('android-app://');let installed=standalone()||get(w.localStorage,key)==='1',prompt=null,dialog=null,checked=false,timer=null;
  const el=(tag,text)=>{const n=d.createElement(tag);if(text)n.textContent=text;return n;};
@@ -30,11 +31,15 @@ export function setupInstall({window:w=window,document:d=document,navigator:nav=
  }
  function schedule(){if(timer||!checked||installed||get(w.sessionStorage,laterKey)==='1'||!(platform.apple||platform.android||prompt))return;timer=w.setTimeout(()=>{timer=null;if(installed||d.visibilityState==='hidden'||d.querySelector('dialog[open]')||/INPUT|TEXTAREA/.test(d.activeElement?.tagName||''))return;show();},1800);}
  for(const b of buttons)b.onclick=()=>{if(installed)return;if(prompt&&!platform.apple)return launch();else show(true);};
- w.addEventListener('beforeinstallprompt',e=>{e.preventDefault();prompt=e;update();schedule();});w.addEventListener('appinstalled',markInstalled);w.addEventListener('storage',e=>{if(e.key===key&&e.newValue==='1')markInstalled();});
+ w.addEventListener('beforeinstallprompt',e=>{e.preventDefault();if(!standalone()){installed=false;remove(w.localStorage,key);}prompt=e;update();schedule();});w.addEventListener('appinstalled',markInstalled);w.addEventListener('storage',e=>{if(e.key===key&&e.newValue==='1')markInstalled();});
  const displayChanged=()=>{if(standalone())markInstalled();};if(media.addEventListener)media.addEventListener('change',displayChanged);else media.addListener?.(displayChanged);
- const ready=(async()=>{if(standalone())markInstalled();if(!installed&&nav.getInstalledRelatedApps){try{const apps=await nav.getInstalledRelatedApps(),manifest=new URL('./manifest.webmanifest',w.location.href).href;if(apps.some(a=>a.platform==='webapp'&&new URL(a.url,w.location.href).href===manifest))markInstalled();}catch{}}
+ const resume=()=>{if(d.visibilityState!=='hidden')schedule();};w.addEventListener('focus',resume);d.addEventListener('visibilitychange',resume);d.addEventListener('focusout',resume);d.addEventListener('close',resume,true);
+ const ready=(async()=>{if(standalone())markInstalled();if(!standalone()&&nav.getInstalledRelatedApps){let guard;try{const apps=await Promise.race([nav.getInstalledRelatedApps(),new Promise(resolve=>{guard=w.setTimeout(()=>resolve(null),1500);})]);const manifest=new URL('./manifest.webmanifest',w.location.href).href,appId=new URL('./',w.location.href).href;
+ if(Array.isArray(apps)){if(apps.some(a=>a.platform==='webapp'&&((a.url&&new URL(a.url,w.location.href).href===manifest)||(a.id&&new URL(a.id,w.location.href).href===appId))))markInstalled();else{installed=false;remove(w.localStorage,key);}}
+ }catch{}finally{if(guard)w.clearTimeout(guard);}}
   checked=true;update();schedule();})();
  return {ready,show,markInstalled};
 }
 if(typeof window!=='undefined'&&typeof document!=='undefined')setupInstall();
+
 
