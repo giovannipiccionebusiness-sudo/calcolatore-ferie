@@ -1,4 +1,4 @@
-import {createLeaveCalculator} from './leave-ui.js?v=56';
+import {createLeaveCalculator} from './leave-ui.js?v=57';
 import {createAccountMenu} from './account-menu.js?v=50';
 import {createNotificationCenter} from './notification-center.js?v=52';
 import {setupOpenedPushNotice} from './push-open-notice.js?v=48';
