@@ -1,3 +1,4 @@
+import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
 import {createAccountMenu} from './account-menu.js?v=50';
 import {createNotificationCenter} from './notification-center.js?v=52';
@@ -78,10 +79,11 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
 }
 
 function showLogged(on){accountMenu.refresh(on);queueMicrotask(()=>{pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
+const passwordRecovery=setupPasswordRecovery({getClient:()=>authClient,onComplete:async()=>{session=null;profile=null;await reloadAccount();},notice:appNotice});
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
  sb=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{accessToken:async()=>session?.access_token??null,global:{fetch:async(input,init={})=>{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),String(input?.url||input).includes('/storage/v1/')?120000:20000);try{return await fetchWithUploadProgress(input,{...init,signal:controller.signal})}finally{clearTimeout(timer)}}}});$('setupAlert').classList.add('hidden');
- authClient.auth.onAuthStateChange((event,s)=>{session=s;if(event==='SIGNED_OUT'){profile=null;showLogged(false);msg('Accesso terminato.')}});
+ authClient.auth.onAuthStateChange((event,s)=>{session=s;passwordRecovery.onAuth(event,s);if(event==='SIGNED_OUT'){profile=null;showLogged(false);msg('Accesso terminato.')}});
  const {data,error}=await authClient.auth.getSession();if(error)throw error;session=data.session;await reloadAccount();
 }
 async function reloadAccount(){profile=null;if(session){const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();if(error){err(error);showLogged(false);return}profile=data;$('accountName').textContent=profile.full_name||session.user.email;$('accountInfo').textContent=profile.active?(profile.role==='admin'?'Amministratore':({N153:"Corte d’Appello",N148:'ENAV'}[profile.site]||profile.site||'Sede da assegnare')):'In attesa di abilitazione';}showLogged(!!session);if(!session){msg('Accedi o richiedi la registrazione.');return}if(!profile.active){msg('Registrazione ricevuta. L’amministratore deve abilitare il tuo account.');return}msg('Accesso effettuato.');if(profile.role==='admin')await refreshAdmin();else {await restoreUploadState();}}
