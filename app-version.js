@@ -1,5 +1,5 @@
 // Updates are offered only when newer code is available; work is never reloaded automatically.
-export const APP_VERSION=70;
+export const APP_VERSION=71;
 export function installVersionControls(){
  const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Versione '+APP_VERSION;
  (document.querySelector('main')||document.body).append(footer);

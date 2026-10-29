@@ -1,4 +1,4 @@
-import './app-version.js?v=70';
+import './app-version.js?v=71';
 import {createColleagueUpload} from './colleague-upload.js?v=66';
 import {createHourBudget} from './hour-budget-ui.js?v=70';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -11,7 +11,7 @@ import {createAdminMessages} from './admin-messages.js?v=48';
 import {createPushControls} from './push-notifications.js?v=53';
 import {openDocumentCamera} from './live-camera.js?v=60';
 import {refreshAdminMenu} from './admin-menu.js?v=35';
-import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=35';
+import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
 import {createWorkerArchive} from './archive.js?v=35';

@@ -1,8 +1,8 @@
 export function revealWorkerTarget(target){
- if(!target)return;const section=target.closest?.('details.worker-section');if(!section)return;
+ if(!target)return;const dialog=target.closest?.('#presenceDialog');if(dialog&&!dialog.open&&document.body.classList.contains('worker-guide-active'))dialog.show();else if(!dialog)document.getElementById('presenceDialog')?.close();const section=target.closest?.('details.worker-section');if(!section)return;
  for(const other of document.querySelectorAll('#workerArea details.worker-section'))other.open=other===section;
 }
-export function resetWorkerMenu(){for(const section of document.querySelectorAll('#workerArea details.worker-section'))section.open=false;}
+export function resetWorkerMenu(){document.getElementById("presenceDialog")?.close();for(const section of document.querySelectorAll('#workerArea details.worker-section'))section.open=false;}
 function pageRows(area){
  const old=area.nextElementSibling;if(old?.dataset.workerPages==='true')old.remove();const rows=[...area.children].filter(e=>e.classList.contains('doc-row'));if(rows.length<=5)return;
  let limit=5;const controls=document.createElement('div');controls.className='list-pages';controls.dataset.workerPages='true';const render=()=>{rows.forEach((row,i)=>row.hidden=i>=limit);controls.replaceChildren();const count=document.createElement('small');count.textContent=`Visualizzati ${Math.min(limit,rows.length)} di ${rows.length}`;controls.append(count);
