@@ -1,5 +1,5 @@
 import {createColleagueUpload} from './colleague-upload.js?v=66';
-import {createHourBudget} from './hour-budget-ui.js?v=65';
+import {createHourBudget} from './hour-budget-ui.js?v=67';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';

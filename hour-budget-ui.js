@@ -1,6 +1,6 @@
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 import {N153_WORKPLACES} from './workplaces.js?v=61';
-import {dailyBudget,effective,scheduled,minutes,hours,latestSheet,assemblePeople,registryWarnings,weekRange,weeklyBudget} from './hour-budget-core.js?v=65';
+import {dailyBudget,effective,scheduled,minutes,hours,latestSheet,assemblePeople,registryWarnings,weekRange,weeklyBudget} from './hour-budget-core.js?v=67';
 const el=(t,s)=>{const e=document.createElement(t);if(s!=null)e.textContent=s;return e;};
 function input(parent,label,type,value=''){const l=el('label',label),i=el('input');i.type=type;i.setAttribute('aria-label',label);i.value=value;i.className='doc-input';l.append(i);parent.append(l);return i;}
 function choose(parent,label,options,value=''){const l=el('label',label),i=el('select');i.className='doc-select';i.setAttribute('aria-label',label);for(const [v,t] of options)i.append(new Option(t,v));i.value=value;l.append(i);parent.append(l);return i;}

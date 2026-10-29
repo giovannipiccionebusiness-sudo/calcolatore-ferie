@@ -2,7 +2,9 @@ import {dec,date} from './leave-core.js';
 export function minutes(v){const n=dec(String(v).replace(',','.')).times(60);if(!n.isInteger()||n.lt(0)||n.gt(1440))throw Error('Usa ore decimali valide, precise al minuto (es. 1,5 = 1 ora e 30).');return n.toNumber();}
 export const hours=n=>dec(n).div(60).toFixed(2).replace('.',',');
 export function effective(rows,day){return rows.filter(r=>(r.valid_from||r.from)<=day).sort((a,b)=>(b.valid_from||b.from).localeCompare(a.valid_from||a.from))[0];}
-export function scheduled(config,day){const s=effective(config?.schedules||[],day);if(!s?.confirmed)return null;const override=config?.day_overrides?.find(x=>x.day===day);return minutes(override?override.hours:s.hours[(date(day).getUTCDay()+6)%7]);}
+export function scheduled(config,day){const s=effective(config?.schedules||[],day);if(!s?.confirmed)return null;const override=config?.day_overrides?.find(x=>x.day===day);// Contract schedules use decimal hours (e.g. 3.66h = 219.6 minutes).
+ // Preserve their precision; only manual presence entries require whole minutes.
+ try{const n=dec(override?override.hours:s.hours?.[(date(day).getUTCDay()+6)%7]).times(60);return n.lt(0)||n.gt(1440)?null:n.toNumber();}catch{return null;}}
 export function latestSheet(documents,account,day,personKey=null){return documents.filter(d=>(account?(d.worker_id===account||d.worker_id===null&&personKey&&d.recipient_person_key===personKey):personKey&&d.recipient_person_key===personKey)&&d.month===day.slice(0,7)&&d.category==='presenze'&&d.review_status!=='rejected'&&(['final'].includes(d.stage)||(['weekly','replacement'].includes(d.stage)&&d.week_ending>=day))).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];}
 export function assemblePeople(imported,accounts,registry){
  const people=[],aliases=[],keys=new Set();
@@ -23,14 +25,14 @@ export function dailyBudget({people,accounts=[],configs,assignments,records,docu
  for(const p of people){const a=effective(assignments.filter(a=>a.person_key===p.person_key),day);if(!a?.included)continue;
  const expected=scheduled(configs[p.person_key],day),r=records.find(r=>r.person_key===p.person_key&&r.day===day);const allocations=r?.allocations||[],own=a.workplace===workplace;
  const incoming=allocations.some(x=>x.workplace===workplace&&(x.ordinary+x.overtime)>0);if(!own&&!incoming)continue;
- if(own&&expected===null)issues.push('Orario mancante: '+p.surname);if(own)budget+=expected||0;
+ if(own&&expected===null)issues.push('Orario mancante: '+p.surname);if(own)budget=dec(budget).plus(expected||0).toNumber();
  const sheet=latestSheet(documents,p.account_id,day,p.person_key),valid=!!r&&(!r.document_id||r.document_id===sheet?.id)&&r.confirmed;
  if(!future&&!valid)issues.push((r?'Presenze da riconfermare: ':'Presenze mancanti: ')+p.surname+' '+p.given_name);
  const worked=!future&&valid?allocations.filter(x=>x.workplace===workplace).reduce((s,x)=>s+x.ordinary+x.overtime,0):0;actual+=worked;
  details.push({person:p,expected:own?expected:0,worked,record:r,valid,substitute:!own});
  }
  const override=calendar.find(x=>x.day===day&&x.workplace===workplace);if(override)budget=override.minutes;
- const difference=actual-budget;return {budget,actual,difference,issues,globalIssues,details,status:future?'future':issues.length||globalIssues.length?'partial':difference>0?'over':difference<0?'saving':'equal'};
+ const difference=dec(actual).minus(budget).toNumber();return {budget,actual,difference,issues,globalIssues,details,status:future?'future':issues.length||globalIssues.length?'partial':difference>0?'over':difference<0?'saving':'equal'};
 }
 // ISO weeks always run Monday–Sunday, including weeks across year/month boundaries.
 export function weekRange(value){
@@ -40,6 +42,6 @@ export function weekRange(value){
  const thursday=new Date(d);thursday.setUTCDate(thursday.getUTCDate()+3);const year=thursday.getUTCFullYear(),jan4=date(year+'-01-04');jan4.setUTCDate(jan4.getUTCDate()-(jan4.getUTCDay()+6)%7);const week=1+Math.round((d-jan4)/(7*86400000));return {start,end:days[6],days,key:year+'-W'+String(week).padStart(2,'0')};
 }
 export function weeklyBudget(input){const range=weekRange(input.start),today=input.today||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date());const days=range.days.map(day=>({...dailyBudget({...input,day,today,rosterConfirmed:(input.checks||[]).some(c=>c.month===day.slice(0,7)&&c.confirmed)}),day}));
- const budget=days.reduce((n,r)=>n+r.budget,0),actual=days.reduce((n,r)=>n+r.actual,0),difference=actual-budget,futureCount=days.filter(r=>r.day>today).length,incomplete=days.some(r=>r.issues.length||r.globalIssues.length),budgetIncomplete=days.some(r=>r.globalIssues.length||r.details.some(x=>x.expected===null)),status=futureCount===7?'future':futureCount>0?'progress':incomplete?'partial':difference>0?'over':difference<0?'saving':'equal';
+ const budget=days.reduce((n,r)=>dec(n).plus(r.budget).toNumber(),0),actual=days.reduce((n,r)=>n+r.actual,0),difference=dec(actual).minus(budget).toNumber(),futureCount=days.filter(r=>r.day>today).length,incomplete=days.some(r=>r.issues.length||r.globalIssues.length),budgetIncomplete=days.some(r=>r.globalIssues.length||r.details.some(x=>x.expected===null)),status=futureCount===7?'future':futureCount>0?'progress':incomplete?'partial':difference>0?'over':difference<0?'saving':'equal';
  return {...range,days,budget,actual,difference,futureCount,incomplete,budgetIncomplete,status};
 }

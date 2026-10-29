@@ -42,3 +42,10 @@ weekly=weeklyBudget({...base,start:day,records:weekRecords,checks,today:'2026-10
 weekly=weeklyBudget({...base,start:'2026-W45',checks,today:'2026-10-29'});assert.equal(weekly.status,'future');assert.equal(weekly.budget,2400);assert.equal(weekly.days[6].budget,0);
 console.log('PASS ISO Monday-Sunday weeks, cross-year/week53 validation, full expected week vs Sunday zero, weekly sum/overrun, partial/future/current-week statuses');
 const unregisteredDocs=[{id:'correct',worker_id:null,recipient_person_key:'a',month:'2026-10',category:'presenze',stage:'weekly',week_ending:'2026-10-30',created_at:'2026-10-28',review_status:'pending'},{id:'wrong',worker_id:null,recipient_person_key:'other',month:'2026-10',category:'presenze',stage:'weekly',week_ending:'2026-10-30',created_at:'2026-10-29',review_status:'pending'}];assert.equal(latestSheet(unregisteredDocs,null,day,'a').id,'correct');assert.equal(latestSheet(unregisteredDocs,'later-account',day,'a').id,'correct');console.log('PASS delegated sheets attributed by unregistered person identity, including after account linking');
+// Imported contract hours may include hundredths of an hour, not whole minutes.
+const fractionalConfig={schedules:[{from:'2026-02-01',hours:['3.66','3.66','3.66','3.66','3.66','0','0'],confirmed:true}]};
+assert.equal(scheduled(fractionalConfig,'2026-10-26'),219.6);
+const fractionalWeek=weeklyBudget({people:[{person_key:'fractional',surname:'Esempio',given_name:''}],configs:{fractional:fractionalConfig},assignments:[{person_key:'fractional',valid_from:'2026-02-01',included:true,workplace:place}],records:[],start:'2026-10-26',workplace:place,today:'2026-10-29'});
+assert.equal(fractionalWeek.budget,1098);assert.equal(fractionalWeek.days.length,7);assert.equal(fractionalWeek.days[5].budget,0);
+assert.equal(scheduled({schedules:[{from:'2026-02-01',hours:['bad'],confirmed:true}]},'2026-10-26'),null);
+console.log('PASS fractional-minute contract hours preserve 3.66h/day and 18.30h/week; invalid schedules stay incomplete without hiding totals');
