@@ -1,3 +1,4 @@
+import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
 import {createAccountMenu} from './account-menu.js?v=50';
@@ -86,7 +87,7 @@ async function boot(){if(!configured){$('setupAlert').textContent='Configurazion
  authClient.auth.onAuthStateChange((event,s)=>{session=s;passwordRecovery.onAuth(event,s);if(event==='SIGNED_OUT'){profile=null;showLogged(false);msg('Accesso terminato.')}});
  const {data,error}=await authClient.auth.getSession();if(error)throw error;session=data.session;await reloadAccount();
 }
-async function reloadAccount(){profile=null;if(session){const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();if(error){err(error);showLogged(false);return}profile=data;$('accountName').textContent=profile.full_name||session.user.email;$('accountInfo').textContent=profile.active?(profile.role==='admin'?'Amministratore':({N153:"Corte d’Appello",N148:'ENAV'}[profile.site]||profile.site||'Sede da assegnare')):'In attesa di abilitazione';}showLogged(!!session);if(!session){msg('Accedi o richiedi la registrazione.');return}if(!profile.active){msg('Registrazione ricevuta. L’amministratore deve abilitare il tuo account.');return}msg('Accesso effettuato.');if(profile.role==='admin')await refreshAdmin();else {await restoreUploadState();}}
+async function reloadAccount(){profile=null;if(session){const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();if(error){err(error);showLogged(false);return}profile=data;$('accountName').textContent=profile.full_name||session.user.email;$('accountInfo').textContent=profile.active?(profile.role==='admin'?'Amministratore':accountSiteLabel(profile)):'In attesa di abilitazione';}showLogged(!!session);if(!session){msg('Accedi o richiedi la registrazione.');return}if(!profile.active){msg('Registrazione ricevuta. L’amministratore deve abilitare il tuo account.');return}msg('Accesso effettuato.');if(profile.role==='admin')await refreshAdmin();else {await restoreUploadState();}}
 $('loginBtn').onclick=async()=>{
  const b=$('loginBtn');if(!sb){msg('Connessione in preparazione. Riprova tra qualche secondo.');return}
  const email=$('email').value.trim(),password=$('password').value;
@@ -375,12 +376,13 @@ refreshAdmin=async function(){
  const users=$('pendingUsers');users.replaceChildren();
  for(const p of people.filter(p=>p.role==='worker')){
   const row=node('div',null,'doc-row');row.dataset.workerId=p.id;const info=node('div');info.append(node('strong',p.full_name||'Nuova registrazione'),node('small',p.active?'Attivo':'Da abilitare'));const emailLine=node('small',p.login_email?'Email: '+p.login_email:'Email non disponibile: aggiorna l’elenco');emailLine.style.overflowWrap='anywhere';emailLine.style.display='block';info.append(emailLine);
-  const controls=node('div'),site=node('select'),phone=node('input');site.className='doc-select';site.setAttribute('aria-label','Sede di '+p.full_name);
+  const controls=node('div'),site=node('select'),phone=node('input');site.className='doc-select';site.setAttribute('aria-label','CDC / committente di '+p.full_name);
   for(const [v,label] of [['N153',"N153 — Corte d’Appello"],['N148','N148 — ENAV']]){const o=node('option',label);o.value=v;site.append(o)}site.value=p.site||'N153';
+  const workplace=createWorkplaceSelect(p,site);info.append(node('small',accountSiteLabel(p)));
   phone.className='doc-input';phone.type='tel';phone.value=p.phone||'';phone.placeholder='WhatsApp, es. 393331234567';phone.setAttribute('aria-label','Numero WhatsApp di '+p.full_name);
-  controls.append(site,phone,button(p.active?'Salva modifiche':'Abilita lavoratore',async()=>{
+  controls.append(site,workplace.group,phone,button(p.active?'Salva modifiche':'Abilita lavoratore',async()=>{
    const phoneValue=phone.value.replace(/[^0-9]/g,'');if(phoneValue&&!/^[0-9]{8,15}$/.test(phoneValue)){msg('Verifica il numero, incluso il prefisso internazionale.');return}
-   const {error}=await sb.from('profiles').update({active:true,site:site.value,phone:phoneValue||null}).eq('id',p.id);if(error)err(error);else{msg('Profilo aggiornato.');await refreshAdmin()}
+   const {error}=await sb.from('profiles').update({active:true,site:site.value,workplace:site.value==='N153'?(workplace.select.value||null):null,phone:phoneValue||null}).eq('id',p.id).select('id').single();if(error)err(error);else{msg('Profilo aggiornato.');await refreshAdmin()}
   }));
   if(p.active)controls.append(button('Disabilita accesso',async()=>{if(!confirm('Disabilitare '+p.full_name+'?'))return;const {error}=await sb.from('profiles').update({active:false}).eq('id',p.id);if(error)err(error);else await refreshAdmin()},true));
   row.append(info,controls);users.append(row);

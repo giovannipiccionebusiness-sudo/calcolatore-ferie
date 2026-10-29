@@ -1,0 +1,4 @@
+<!doctype html><html lang="it"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verifica assegnazione sede</title><h1>Assegna sede lavoratore</h1><p>Mario Esempio · dati fittizi</p><select aria-label="CDC / committente"><option>N153</option><option>N148</option></select><div id="controls"></div><button>Salva modifiche</button><p id="worker" role="status"></p><script type="module">
+import {createWorkplaceSelect,accountSiteLabel} from '../../workplaces.js';
+const p={full_name:'Mario Esempio',site:'N153'},cdc=document.querySelector('select'),w=createWorkplaceSelect(p,cdc);document.querySelector('#controls').append(w.group);document.querySelector('button').onclick=()=>{p.site=cdc.value;p.workplace=p.site==='N153'?w.select.value:null;document.querySelector('#worker').textContent='Profilo lavoratore: '+accountSiteLabel(p);};
+</script></html>
