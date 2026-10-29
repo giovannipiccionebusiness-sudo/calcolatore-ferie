@@ -3,7 +3,7 @@ export function minutes(v){const n=dec(String(v).replace(',','.')).times(60);if(
 export const hours=n=>dec(n).div(60).toFixed(2).replace('.',',');
 export function effective(rows,day){return rows.filter(r=>(r.valid_from||r.from)<=day).sort((a,b)=>(b.valid_from||b.from).localeCompare(a.valid_from||a.from))[0];}
 export function scheduled(config,day){const s=effective(config?.schedules||[],day);if(!s?.confirmed)return null;const override=config?.day_overrides?.find(x=>x.day===day);return minutes(override?override.hours:s.hours[(date(day).getUTCDay()+6)%7]);}
-export function latestSheet(documents,account,day){return documents.filter(d=>d.worker_id===account&&d.month===day.slice(0,7)&&d.category==='presenze'&&d.review_status!=='rejected'&&(['final'].includes(d.stage)||(['weekly','replacement'].includes(d.stage)&&d.week_ending>=day))).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];}
+export function latestSheet(documents,account,day,personKey=null){return documents.filter(d=>(account?(d.worker_id===account||d.worker_id===null&&personKey&&d.recipient_person_key===personKey):personKey&&d.recipient_person_key===personKey)&&d.month===day.slice(0,7)&&d.category==='presenze'&&d.review_status!=='rejected'&&(['final'].includes(d.stage)||(['weekly','replacement'].includes(d.stage)&&d.week_ending>=day))).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];}
 export function assemblePeople(imported,accounts,registry){
  const people=[],aliases=[],keys=new Set();
  for(const p of imported){const hire=registry.find(r=>r.account_id&&r.account_id===p.account_id);const key=hire?.person_key||p.person_key;if(keys.has(key))continue;keys.add(key);people.push({...p,person_key:key,imported_key:p.person_key,new_hire:!!hire});if(hire)aliases.push({from:p.person_key,to:key});}
@@ -24,7 +24,7 @@ export function dailyBudget({people,accounts=[],configs,assignments,records,docu
  const expected=scheduled(configs[p.person_key],day),r=records.find(r=>r.person_key===p.person_key&&r.day===day);const allocations=r?.allocations||[],own=a.workplace===workplace;
  const incoming=allocations.some(x=>x.workplace===workplace&&(x.ordinary+x.overtime)>0);if(!own&&!incoming)continue;
  if(own&&expected===null)issues.push('Orario mancante: '+p.surname);if(own)budget+=expected||0;
- const sheet=latestSheet(documents,p.account_id,day),valid=!!r&&(!r.document_id||r.document_id===sheet?.id)&&r.confirmed;
+ const sheet=latestSheet(documents,p.account_id,day,p.person_key),valid=!!r&&(!r.document_id||r.document_id===sheet?.id)&&r.confirmed;
  if(!future&&!valid)issues.push((r?'Presenze da riconfermare: ':'Presenze mancanti: ')+p.surname+' '+p.given_name);
  const worked=!future&&valid?allocations.filter(x=>x.workplace===workplace).reduce((s,x)=>s+x.ordinary+x.overtime,0):0;actual+=worked;
  details.push({person:p,expected:own?expected:0,worked,record:r,valid,substitute:!own});

@@ -89,14 +89,14 @@ async function worker(){
   const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
   const d=must(await db.from("documents").select("*").eq("id",job.document_id).single()) as any;
   // Stable worker UUID is authoritative; changes to the displayed name cannot create new folders.
-  const p=must(await db.from("profiles").select("full_name").eq("id",d.worker_id).single()) as any;
+  const p=must(await db.rpc("drive_recipient_identity",{document:d.id})) as any;
   const root=await folder(access,"root","Documenti lavoratori - Ferie Facili TEST");
   if(connection.root_id!==root)must(await db.from("drive_credentials").update({root_id:root}).eq("singleton",true));
   let parent=root;
   const kind=d.category==="presenze"?(d.stage==="final"?"Presenze definitive":"Presenze settimanali"):types[d.category];
   if(!kind)throw new Error("Unsupported document category");
-  const names=[d.site==="N153"?"N153 - Corte d’Appello":"N148 - ENAV",(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+d.worker_id+"]",d.month.slice(0,4),kind,d.month.slice(5,7)];
-  const keys=[d.site,d.worker_id,d.month.slice(0,4),kind,d.month.slice(5,7)];
+  const names=[d.site==="N153"?"N153 - Corte d’Appello":"N148 - ENAV",(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",d.month.slice(0,4),kind,d.month.slice(5,7)];
+  const keys=[d.site,p.key,d.month.slice(0,4),kind,d.month.slice(5,7)];
   let path="root";
   for(let i=0;i<keys.length;i++){path+="/"+keys[i];parent=await folder(access,path,names[i],parent);}
   const stored=await db.storage.from("private-documents").download(d.file_path);

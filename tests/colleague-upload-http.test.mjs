@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';import {createHandler,fileSignature} from '../supabase/functions/colleague-upload/handler.js';
+assert.ok(fileSignature(new TextEncoder().encode('%PDF-1.4'),'application/pdf'));assert.ok(!fileSignature(new TextEncoder().encode('not pdf'),'application/pdf'));assert.ok(fileSignature(new Uint8Array([255,216,255]),'image/jpeg'));
+const req=(body,auth=true)=>new Request('https://local',{method:'POST',headers:auth?{Authorization:'Bearer fake'}:{},body:JSON.stringify(body)});
+let rpcCalls=[];const db={auth:{getUser:async()=>({data:{user:{id:'actor'}}})},rpc:async(name,args)=>{rpcCalls.push({name,args});if(name==='colleague_directory')return {data:[{recipient_key:'target',full_name:'Destinatario',account_id:'other',person_key:'sensitive-hr-key',storage_id:'secret-path',workplace:'Sede'}]};if(name==='colleague_prepare')return {data:{id:'id',path:'target/file.pdf',duplicate:false,recipient_name:'Destinatario'}};return {data:{id:'id',recipient_name:'Destinatario'}};},storage:{from:()=>({createSignedUploadUrl:async()=>({data:{token:'signed-token'}})})}};
+const handler=createHandler(db);assert.equal((await handler(req({action:'list'},false))).status,401);
+let response=await handler(req({action:'list'})),list=await response.json();assert.deepEqual(Object.keys(list.recipients[0]).sort(),['key','name','registered','workplace']);
+response=await handler(req({action:'prepare',recipient:'target',month:'2026-10',stage:'weekly',name:'a.pdf',mime:'application/pdf',size:8,actor:'forged'}));assert.equal(response.status,200);assert.equal(rpcCalls.at(-1).args.actor,'actor');
+const bad=createHandler({...db,auth:{getUser:async()=>({error:'bad',data:{user:null}})}});assert.equal((await bad(req({action:'list'}))).status,401);
+console.log('PASS authentication, server actor identity, minimal directory, no storage/HR identifiers leaked, signature checks and signed preparation');

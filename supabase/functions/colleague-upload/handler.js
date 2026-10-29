@@ -1,0 +1,17 @@
+const headers={'Access-Control-Allow-Origin':'https://giovannipiccionebusiness-sudo.github.io','Access-Control-Allow-Headers':'authorization, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS','Content-Type':'application/json','Cache-Control':'no-store'};
+export function fileSignature(bytes,mime){if(mime==='application/pdf')return new TextDecoder().decode(bytes.slice(0,5))==='%PDF-';if(mime==='image/jpeg')return bytes[0]===255&&bytes[1]===216&&bytes[2]===255;if(mime==='image/png')return [137,80,78,71,13,10,26,10].every((v,i)=>bytes[i]===v);if(mime==='image/webp')return new TextDecoder().decode(bytes.slice(0,4))==='RIFF'&&new TextDecoder().decode(bytes.slice(8,12))==='WEBP';return false;}
+export function createHandler(db){return async req=>{
+ const reply=(d,status=200)=>new Response(JSON.stringify(d),{status,headers});if(req.method==='OPTIONS')return new Response('',{headers});if(req.method!=='POST')return reply({error:'Metodo non consentito'},405);
+ try{const jwt=req.headers.get('Authorization')?.replace(/^Bearer /i,'');if(!jwt)return reply({error:'Accedi nuovamente'},401);const auth=await db.auth.getUser(jwt);if(auth.error||!auth.data.user)return reply({error:'Sessione scaduta'},401);const actor=auth.data.user.id;
+ const text=await req.text();if(text.length>32000)return reply({error:'Richiesta troppo grande'},413);const b=JSON.parse(text);const rpc=async(name,args)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
+ const directory=await rpc('colleague_directory',{actor});
+ if(b.action==='list')return reply({recipients:directory.map(x=>({key:x.recipient_key,name:x.full_name,workplace:x.workplace,registered:!!x.account_id}))});
+ if(b.action==='prepare'){const prepared=await rpc('colleague_prepare',{actor,recipient:b.recipient,period:b.month,week:b.week||null,kind:b.stage,filename:b.name,mimetype:b.mime,bytes:b.size});const signed=await db.storage.from('private-documents').createSignedUploadUrl(prepared.path);if(signed.error)throw Error('Impossibile preparare il caricamento');return reply({...prepared,token:signed.data.token});}
+ if(!['finish','upload_token'].includes(b.action))throw Error('Operazione non valida');
+ const r=await db.from('colleague_upload_intents').select('*').eq('id',b.id).eq('actor',actor).single();if(r.error||!r.data)throw Error('Invio non trovato');const i=r.data;
+ if(!directory.some(x=>x.recipient_key===i.recipient_key&&x.workplace===i.workplace))throw Error('Collega non più disponibile nella tua sede');
+ if(b.action==='upload_token'){if(new Date(i.created_at).getTime()<Date.now()-86400000)throw Error('Invio scaduto');const signed=await db.storage.from('private-documents').createSignedUploadUrl(i.file_path);if(signed.error)throw Error('Caricamento già presente: premi Riprendi invio');return reply({path:i.file_path,token:signed.data.token});}
+ if(!i.finished_at){const file=await db.storage.from('private-documents').download(i.file_path);if(file.error||!file.data)throw Error('Foto non ancora caricata');const bytes=new Uint8Array(await file.data.arrayBuffer());if(bytes.length!==i.size||bytes.length>12582912||!fileSignature(bytes,i.mime))throw Error('Il contenuto del file non corrisponde al formato selezionato');}
+ return reply(await rpc('colleague_finish',{actor,intent:i.id,confirm_duplicate:b.confirm_duplicate===true}));
+ }catch(e){return reply({error:String(e.message||'Invio non riuscito').slice(0,260)},400);}
+};}
