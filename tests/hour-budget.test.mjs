@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {dailyBudget,minutes,scheduled,latestSheet,assemblePeople,registryWarnings} from '../hour-budget-core.js';
+import {dailyBudget,minutes,scheduled,latestSheet,assemblePeople,registryWarnings,weekRange,weeklyBudget} from '../hour-budget-core.js';
 const place='Tribunale Penale Lecce',day='2026-10-26';
 const people=[{person_key:'a',surname:'Uno',site:'N153',account_id:null},{person_key:'b',surname:'Due',site:'N153',account_id:'b'}];
 const config={schedules:[{from:'2026-01-01',hours:['4','4','4','4','4','0','0'],confirmed:true}]};
@@ -30,3 +30,14 @@ const hires=[{person_key:'ACCOUNT:new',account_id:'new',schedules:[]}],accts=[{i
 let assembled=assemblePeople(people,accts,hires);assert.equal(assembled.people.length,3);assert.equal(assembled.people.at(-1).account_id,'new');
 assembled=assemblePeople([...people,{person_key:'hrnew',account_id:'new',surname:'Nuovo',given_name:'Assunto'}],accts,hires);assert.equal(assembled.people.filter(x=>x.account_id==='new').length,1);assert.equal(assembled.people.at(-1).person_key,'ACCOUNT:new');assert.equal(assembled.people.at(-1).imported_key,'hrnew');
 console.log('PASS site-only issues and details, known incoming substitutes, future dates without false missing presences, new hires independent of leave balances, later HR linking without duplicate budget');
+
+assert.deepEqual(weekRange('2026-11-01').days,['2026-10-26','2026-10-27','2026-10-28','2026-10-29','2026-10-30','2026-10-31','2026-11-01']);
+assert.equal(weekRange('2026-W45').start,'2026-11-02');assert.equal(weekRange('2026-W45').end,'2026-11-08');
+assert.equal(weekRange('2027-01-01').key,'2026-W53');assert.equal(weekRange('2026-W53').end,'2027-01-03');assert.throws(()=>weekRange('2025-W53'));assert.throws(()=>weekRange('2026-W00'));
+const range=weekRange(day),weekRecords=range.days.flatMap(d=>people.map(p=>({...rec(p.person_key,d.endsWith('31')||d.endsWith('01')?0:240),day:d}))),checks=[{month:'2026-10',confirmed:true},{month:'2026-11',confirmed:true}];
+let weekly=weeklyBudget({...base,start:day,records:weekRecords,checks,today:'2026-11-02'});assert.equal(weekly.budget,2400);assert.equal(weekly.actual,2400);assert.equal(weekly.status,'equal');assert.equal(weekly.days[6].budget,0);
+weekly=weeklyBudget({...base,start:day,records:weekRecords.map((r,i)=>i===0?{...r,allocations:[{workplace:place,ordinary:240,overtime:60}]}:r),checks,today:'2026-11-02'});assert.equal(weekly.status,'over');assert.equal(weekly.difference,60);
+weekly=weeklyBudget({...base,start:day,records:weekRecords.slice(1),checks,today:'2026-11-02'});assert.equal(weekly.status,'partial');assert.equal(weekly.budgetIncomplete,false);
+weekly=weeklyBudget({...base,start:day,records:weekRecords,checks,today:'2026-10-29'});assert.equal(weekly.status,'progress');
+weekly=weeklyBudget({...base,start:'2026-W45',checks,today:'2026-10-29'});assert.equal(weekly.status,'future');assert.equal(weekly.budget,2400);assert.equal(weekly.days[6].budget,0);
+console.log('PASS ISO Monday-Sunday weeks, cross-year/week53 validation, full expected week vs Sunday zero, weekly sum/overrun, partial/future/current-week statuses');
