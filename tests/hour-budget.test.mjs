@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {dailyBudget,minutes,scheduled,latestSheet} from '../hour-budget-core.js';
+import {dailyBudget,minutes,scheduled,latestSheet,assemblePeople,registryWarnings} from '../hour-budget-core.js';
 const place='Tribunale Penale Lecce',day='2026-10-26';
 const people=[{person_key:'a',surname:'Uno',site:'N153',account_id:null},{person_key:'b',surname:'Due',site:'N153',account_id:'b'}];
 const config={schedules:[{from:'2026-01-01',hours:['4','4','4','4','4','0','0'],confirmed:true}]};
@@ -20,3 +20,13 @@ assert.equal(latestSheet(docs,'b',day).id,'new');assert.equal(dailyBudget({...ba
 assert.equal(dailyBudget({...base,records:[rec('a',0),rec('b',0)],calendar:[{workplace:place,day,minutes:0}]}).status,'equal');
 assert.equal(dailyBudget({...base,accounts:[{id:'unlinked',site:'N153',active:true,full_name:'Nuovo'}]}).status,'partial');
 console.log('PASS budget includes unregistered workers, contract dates, zero rest, absence replacement, savings/overruns, transfers, incomplete roster/schedules/presences, superseded sheets, calendar override, exact minutes');
+
+const unrelated={person_key:'c',surname:'AltraSede',given_name:'',account_id:null};
+const filtered={...base,people:[...people,unrelated],assignments:[...base.assignments,{person_key:'c',valid_from:'2026-01-01',workplace:'Procura Taranto',included:true}],records:[rec('a',240),rec('b',240)]};
+r=dailyBudget(filtered);assert.equal(r.status,'equal');assert.ok(!r.issues.some(x=>x.includes('AltraSede')));assert.equal(r.details.length,2);
+r=dailyBudget({...filtered,records:[...filtered.records,rec('c',120,0,place)]});assert.equal(r.actual,600);assert.equal(r.details.length,3);assert.ok(r.details.find(x=>x.person.person_key==='c').substitute);
+r=dailyBudget({...base,day:'2026-11-01',today:'2026-10-29'});assert.equal(r.status,'future');assert.ok(!r.issues.some(x=>x.includes('Presenze mancanti')));
+const hires=[{person_key:'ACCOUNT:new',account_id:'new',schedules:[]}],accts=[{id:'new',full_name:'Nuovo Assunto',site:'N153',active:true}];
+let assembled=assemblePeople(people,accts,hires);assert.equal(assembled.people.length,3);assert.equal(assembled.people.at(-1).account_id,'new');
+assembled=assemblePeople([...people,{person_key:'hrnew',account_id:'new',surname:'Nuovo',given_name:'Assunto'}],accts,hires);assert.equal(assembled.people.filter(x=>x.account_id==='new').length,1);assert.equal(assembled.people.at(-1).person_key,'ACCOUNT:new');assert.equal(assembled.people.at(-1).imported_key,'hrnew');
+console.log('PASS site-only issues and details, known incoming substitutes, future dates without false missing presences, new hires independent of leave balances, later HR linking without duplicate budget');
