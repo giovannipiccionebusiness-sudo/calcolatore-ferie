@@ -7,6 +7,14 @@ grant all on all tables in schema public,storage to service_role;grant usage on 
 insert into profiles values('00000000-0000-0000-0000-000000000001','Uploader','worker','N153','Tribunale Civile Lecce',true),('00000000-0000-0000-0000-000000000002','Recipient','worker','N153','Tribunale Civile Lecce',true),('00000000-0000-0000-0000-000000000003','Other Site','worker','N153','Procura Taranto',true);
 insert into leave_people values('hr','Non','Registrato',null);insert into hour_budget_registry values('hr','hr',null);insert into hour_budget_assignments values('hr','2026-01-01',true,'Tribunale Civile Lecce');`);
 await db.exec((await Promise.all(['colleague-upload.sql','colleague-document-validator.sql','colleague-budget-validator.sql'].map(f=>readFile(new URL('../supabase/'+f,import.meta.url),'utf8')))).join('\n'));await db.exec('create trigger validate_document before insert or update on documents for each row execute function private.validate_document()');
+await db.exec(`alter table profiles add column created_at timestamptz default now();
+create table app_notifications(id uuid default gen_random_uuid(),user_id uuid,event_key text,kind text,title text,body text,unique(user_id,event_key));
+create table test_push_subscriptions(id uuid primary key,user_id uuid,app_scope text,push_keys jsonb);
+create table test_push_queue(subscription_id uuid,kind text,event_key text,message text,unique(subscription_id,event_key),constraint test_push_queue_kind_check check(kind in('custom')));
+insert into profiles(id,full_name,role,site,workplace,active) values('00000000-0000-0000-0000-000000000004','Admin','admin','N153','Tribunale Civile Lecce',true);
+insert into test_push_subscriptions values('00000000-0000-0000-0000-000000000011','00000000-0000-0000-0000-000000000002','production','{}'),('00000000-0000-0000-0000-000000000012','00000000-0000-0000-0000-000000000004','production','{}'),('00000000-0000-0000-0000-000000000013','00000000-0000-0000-0000-000000000002','test','{}');
+grant all on app_notifications,test_push_subscriptions,test_push_queue to service_role;`);
+await db.exec(await readFile(new URL('../supabase/colleague-documents-v66.sql',import.meta.url),'utf8'));
 const actor='00000000-0000-0000-0000-000000000001',recipient='A:00000000-0000-0000-0000-000000000002';
 await db.exec('set role service_role');await assert.rejects(()=>db.query('select * from colleague_directory($1)',[actor]));await db.exec(`update profiles set can_upload_for_colleagues=true where id='${actor}'`);
 let list=(await db.query('select * from colleague_directory($1)',[actor])).rows;assert.equal(list.length,2);assert.ok(!list.some(x=>x.full_name==='Other Site'));await assert.rejects(()=>db.query('select colleague_prepare($1,$2,$3,$4,$5,$6,$7,$8)',[actor,'A:00000000-0000-0000-0000-000000000003','2026-10','2026-10-30','weekly','test.pdf','application/pdf',8]));
@@ -23,5 +31,24 @@ await assert.rejects(()=>db.query(`insert into hour_budget_days(person_key,day,d
 await db.exec(`update leave_people set account_id='00000000-0000-0000-0000-000000000002' where person_key='hr'`);
 const linkedIdentity=(await db.query('select drive_recipient_identity($1) v',[docs[0].id])).rows[0].v;assert.equal(linkedIdentity.key,identity.key);
 await db.exec(`insert into drive_folders values('root/N153/00000000-0000-0000-0000-000000000002')`);assert.equal((await db.query('select drive_recipient_identity($1) v',[docs[0].id])).rows[0].v.key,'00000000-0000-0000-0000-000000000002');
+// All request categories, required authorization, notifications and no duplicated events.
+for(const category of ['ferie','rol','legge104','malattia','congedo_parentale']){
+ const request=(await db.query('select colleague_prepare_document($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) v',[actor,recipient,'2026-10',null,'request','test.pdf','application/pdf',8,category,'dal 12 al 14'])).rows[0].v;
+ await object(request);await db.query('select colleague_finish($1,$2,false)',[actor,request.id]);
+ let d=(await db.query('select * from documents where id=$1',[request.id])).rows[0];assert.equal(d.category,category);assert.equal(d.note,'dal 12 al 14');assert.equal(d.stage,'request');assert.equal(d.authorization,['ferie','rol'].includes(category)?'pending':'not_applicable');
+ let n=(await db.query('select * from app_notifications where event_key=$1',['colleague_upload:'+request.id])).rows;assert.equal(n.length,1);assert.equal(n[0].user_id,d.worker_id);assert.ok(n[0].body.includes('Uploader'));assert.ok(!n[0].body.includes(category));
+ assert.equal((await db.query('select * from app_notifications where event_key=$1',['admin_review:'+request.id])).rows.length,1);
+ await db.query('select colleague_finish($1,$2,false)',[actor,request.id]);assert.equal((await db.query('select * from app_notifications where event_key=$1',['colleague_upload:'+request.id])).rows.length,1);
+ await db.query("update documents set review_status='verified' where id=$1",[request.id]);
+ assert.equal((await db.query('select * from app_notifications where event_key=$1',['colleague_review:'+request.id+':verified'])).rows.length,1);
+ if(['ferie','rol'].includes(category)){
+  assert.equal((await db.query('select * from app_notifications where event_key=$1',['admin_authorization:'+request.id])).rows.length,1);
+  await db.query(`update documents set "authorization"='approved' where id=$1`,[request.id]);assert.equal((await db.query('select * from app_notifications where event_key=$1',['colleague_authorization:'+request.id+':approved'])).rows.length,1);
+ }
+ assert.equal((await db.query('select * from test_push_queue where event_key=$1',['colleague_upload:'+request.id])).rows.length,1);
+}
+const taskList=(await db.query("select get_admin_notification_tasks('00000000-0000-0000-0000-000000000004',0) v")).rows[0].v;assert.ok(taskList.items.some(x=>x.person.includes('Non Registrato')));
+for(const [category,stage,week,note] of [['invalid','request',null,''],['ferie','weekly','2026-10-30',''],['presenze','request',null,''],['ferie','request','2026-10-30',''],['rol','request',null,'x'.repeat(251)]])await assert.rejects(()=>db.query('select colleague_prepare_document($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[actor,recipient,'2026-10',week,stage,'a.pdf','application/pdf',8,category,note]));
+console.log('PASS all document categories, notes, verification then authorization, recipient/admin inbox and production push, idempotent receipts, unregistered admin tasks, invalid category/stage/note rejection');
 const pending=await prepare(recipient);await object(pending);await db.exec(`update profiles set workplace='Procura Taranto' where id='${actor}'`);await assert.rejects(()=>db.query('select colleague_finish($1,$2,true)',[actor,pending.id]));
-await db.exec('reset role;set role authenticated');await assert.rejects(()=>db.query('select * from colleague_directory($1)',[actor]));await assert.rejects(()=>db.query('select * from colleague_upload_intents'));await db.close();console.log('PASS default disabled, same-site minimal directory, other-site denial, attribution, replacement confirmation, idempotency, unregistered recipient/Drive identity, recheck at send, no worker RPC or intent access');
+await db.exec('reset role;set role authenticated');await assert.rejects(()=>db.query('select * from colleague_directory($1)',[actor]));await assert.rejects(()=>db.query('select * from colleague_upload_intents'));await assert.rejects(()=>db.query('select colleague_prepare_document($1,$2,$3,$4,$5,$6,$7,$8)',[actor,recipient,'2026-10',null,'final','a.pdf','application/pdf',8]));await db.close();console.log('PASS default disabled, same-site minimal directory, other-site denial, attribution, replacement confirmation, idempotency, unregistered recipient/Drive identity, recheck at send, no worker RPC or intent access');

@@ -7,6 +7,7 @@ const b64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+'
 const encode=(v:unknown)=>b64(new TextEncoder().encode(JSON.stringify(v)));
 export function validEndpoint(value:string){try{const u=new URL(value);return u.protocol==='https:'&&!u.port&&!u.username&&!u.password&&u.pathname.length>1&&(u.hostname==='fcm.googleapis.com'||u.hostname==='updates.push.services.mozilla.com'||u.hostname.endsWith('.push.apple.com')||u.hostname.endsWith('.notify.windows.com'));}catch{return false;}}
 export function notificationText(item:any){
+ if(['colleague_upload','colleague_review','colleague_authorization'].includes(item.kind))return {title:item.kind==='colleague_upload'?'Documento caricato per te':item.kind==='colleague_review'?'Esito verifica documento':'Esito della tua richiesta',body:item.message};
  const month=item.target_month||item.event_key?.split(':')[1]?.slice(0,7)||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()).slice(0,7);
  const label=/^\d{4}-(0[1-9]|1[0-2])$/.test(month)?new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'Europe/Rome'}).format(new Date(month+'-15T12:00:00Z')):'del mese';
  if(item.kind==='admin_registration')return {title:'Account da abilitare',body:'Un account lavoratore è in attesa di abilitazione. Apri la campanella e consulta “Da gestire”.'};
@@ -34,6 +35,7 @@ async function stillNeeded(item:any,sub:any){
   return item.kind==='admin_review'?d.review_status==='pending':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending';
  }
  if(!p.active||p.role!=='worker')return false;
+ if(['colleague_upload','colleague_review','colleague_authorization'].includes(item.kind))return sub.app_scope==='production';
  if(item.kind==='activation'||item.kind==='custom')return true;
  const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()),month=item.kind==='monthly_request'?item.target_month:local.slice(0,7);
  if(item.kind==='weekly'&&item.event_key!=='weekly:'+local)return false;
