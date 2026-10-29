@@ -21,3 +21,9 @@ const {createHourBudget}=await import('../hour-budget-ui.js');const ctl=createHo
 for(let i=0;i<100;i++){if(panel.textContent.includes('Operazione completata.'))break;await new Promise(r=>setImmediate(r));}
 assert.ok(panel.textContent.includes('Operazione completata.'),panel.textContent);assert.ok(panel.textContent.includes('Riepilogo settimanale'));assert.ok(panel.textContent.includes('Ore previste nella settimana: 18,30 h'));assert.ok(panel.textContent.includes('Dettaglio dei giorni'));assert.equal(panel.querySelectorAll('details').filter(e=>e.className?.startsWith('budget-line')).length,7);
 console.log('PASS production panel renders weekly total and all seven days with imported 3.66h/day schedule');
+assert.ok(panel.textContent.indexOf('Riepilogo settimanale')<panel.textContent.indexOf('1 · Organico e assegnazioni sedi'));
+const workingFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error('Rete temporaneamente non disponibile');};
+const retryController=createHourBudget({getClient:()=>client,getSession:()=>({user:{id:'fake-retry'},access_token:'fake'}),getProfile:()=>profile});retryController.refresh();const retryPanel=operations.children[0];retryPanel.open=true;retryPanel.events.toggle();await new Promise(r=>setImmediate(r));
+const retry=retryPanel.querySelectorAll('button').find(b=>b.textContent==='Riprova caricamento');assert.equal(retry.hidden,false);assert.ok(retryPanel.textContent.includes('Caricamento non completato'));
+globalThis.fetch=workingFetch;await retry.onclick();assert.equal(retry.hidden,true);assert.ok(retryPanel.textContent.includes('Riepilogo settimanale'));assert.equal(retryPanel.querySelectorAll('details').filter(e=>e.className?.startsWith('budget-line')).length,7);
+console.log('PASS summary precedes editors; initial network failure offers retry and recovers all totals');

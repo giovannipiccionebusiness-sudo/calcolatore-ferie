@@ -1,0 +1,7 @@
+import assert from 'node:assert/strict';
+class Element{constructor(){this.children=[];this.textContent='';}append(...items){this.children.push(...items);}after(item){this.next=item;}setAttribute(){}}
+const brand=new Element();globalThis.document={visibilityState:'visible',head:new Element(),createElement:()=>new Element(),querySelector:()=>brand,addEventListener(){}};globalThis.window={addEventListener(){}};
+let replaces=[],updated=0,confirmed=false;globalThis.location={href:'https://example.test/calcolatore-ferie/?existing=yes',replace:url=>replaces.push(url)};globalThis.confirm=()=>confirmed;
+Object.defineProperty(globalThis,'navigator',{value:{serviceWorker:{getRegistration:async()=>({update:async()=>updated++})}},configurable:true});globalThis.fetch=async()=>({ok:true,json:async()=>({version:69})});
+const {APP_VERSION}=await import('../app-version.js');await new Promise(r=>setImmediate(r));const [label,button,notice]=brand.next.children;assert.equal(APP_VERSION,68);assert.equal(label.textContent,'Versione 68');assert.ok(notice.textContent.includes('69'));await button.onclick();assert.equal(replaces.length,0);assert.equal(updated,0);confirmed=true;await button.onclick();assert.equal(updated,1);assert.equal(replaces.length,1);const target=new URL(replaces[0]);assert.equal(target.searchParams.get('existing'),'yes');assert.equal(target.searchParams.get('versione'),'69');
+console.log('PASS visible running version, newer-release notice, confirmation before reload, worker update, existing URL preserved');
