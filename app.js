@@ -1,4 +1,4 @@
-import './app-version.js?v=68';
+import './app-version.js?v=69';
 import {createColleagueUpload} from './colleague-upload.js?v=66';
 import {createHourBudget} from './hour-budget-ui.js?v=68';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
