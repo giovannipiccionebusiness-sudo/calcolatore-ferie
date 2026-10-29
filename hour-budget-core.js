@@ -41,7 +41,17 @@ export function weekRange(value){
  const start=d.toISOString().slice(0,10),days=Array.from({length:7},(_,i)=>{const x=new Date(d);x.setUTCDate(x.getUTCDate()+i);return x.toISOString().slice(0,10);});
  const thursday=new Date(d);thursday.setUTCDate(thursday.getUTCDate()+3);const year=thursday.getUTCFullYear(),jan4=date(year+'-01-04');jan4.setUTCDate(jan4.getUTCDate()-(jan4.getUTCDay()+6)%7);const week=1+Math.round((d-jan4)/(7*86400000));return {start,end:days[6],days,key:year+'-W'+String(week).padStart(2,'0')};
 }
-export function weeklyBudget(input){const range=weekRange(input.start),today=input.today||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date());const days=range.days.map(day=>({...dailyBudget({...input,day,today,rosterConfirmed:(input.checks||[]).some(c=>c.month===day.slice(0,7)&&c.confirmed)}),day}));
- const budget=days.reduce((n,r)=>dec(n).plus(r.budget).toNumber(),0),actual=days.reduce((n,r)=>n+r.actual,0),difference=dec(actual).minus(budget).toNumber(),futureCount=days.filter(r=>r.day>today).length,incomplete=days.some(r=>r.issues.length||r.globalIssues.length),budgetIncomplete=days.some(r=>r.globalIssues.length||r.details.some(x=>x.expected===null)),status=futureCount===7?'future':futureCount>0?'progress':incomplete?'partial':difference>0?'over':difference<0?'saving':'equal';
+function periodBudget(input,range){const today=input.today||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date());const days=range.days.map(day=>({...dailyBudget({...input,day,today,rosterConfirmed:(input.checks||[]).some(c=>c.month===day.slice(0,7)&&c.confirmed)}),day}));
+ const budget=days.reduce((n,r)=>dec(n).plus(r.budget).toNumber(),0),actual=days.reduce((n,r)=>n+r.actual,0),difference=dec(actual).minus(budget).toNumber(),futureCount=days.filter(r=>r.day>today).length,incomplete=days.some(r=>r.issues.length||r.globalIssues.length),budgetIncomplete=days.some(r=>r.globalIssues.length||r.details.some(x=>x.expected===null)),status=futureCount===range.days.length?'future':futureCount>0?'progress':incomplete?'partial':difference>0?'over':difference<0?'saving':'equal';
  return {...range,days,budget,actual,difference,futureCount,incomplete,budgetIncomplete,status};
 }
+
+// Calendar months never include days from adjacent months.
+export function monthRange(value){
+ const key=String(value||'');if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(key))throw Error('Mese non valido');
+ const start=key+'-01',first=date(start),last=new Date(first);last.setUTCMonth(last.getUTCMonth()+1);last.setUTCDate(0);
+ const end=last.toISOString().slice(0,10),days=Array.from({length:last.getUTCDate()},(_,i)=>key+'-'+String(i+1).padStart(2,'0'));
+ return {key,start,end,days};
+}
+export const weeklyBudget=input=>periodBudget(input,weekRange(input.start));
+export const monthlyBudget=input=>periodBudget(input,monthRange(input.month||input.start?.slice(0,7)));

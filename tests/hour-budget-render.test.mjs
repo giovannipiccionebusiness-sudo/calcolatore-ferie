@@ -7,7 +7,7 @@ class Element{
  append(...nodes){this.children.push(...nodes);}
  prepend(...nodes){this.children.unshift(...nodes);}
  replaceChildren(...nodes){this.text='';this.children=nodes;}
- setAttribute(){} removeAttribute(){}
+ setAttribute(k,v){(this.attrs??={})[k]=v;} removeAttribute(){}
  addEventListener(name,fn){this.events[name]=fn;}
  querySelectorAll(tag){return this.children.flatMap(c=>[...(c.tagName===tag.toUpperCase()?[c]:[]),...c.querySelectorAll(tag)]);}
 }
@@ -27,3 +27,10 @@ const retryController=createHourBudget({getClient:()=>client,getSession:()=>({us
 const retry=retryPanel.querySelectorAll('button').find(b=>b.textContent==='Riprova caricamento');assert.equal(retry.hidden,false);assert.ok(retryPanel.textContent.includes('Caricamento non completato'));
 globalThis.fetch=workingFetch;await retry.onclick();assert.equal(retry.hidden,true);assert.ok(retryPanel.textContent.includes('Riepilogo settimanale'));assert.equal(retryPanel.querySelectorAll('details').filter(e=>e.className?.startsWith('budget-line')).length,7);
 console.log('PASS summary precedes editors; initial network failure offers retry and recovers all totals');
+
+const view=panel.querySelectorAll('select').find(e=>e.attrs?.['aria-label']==='Visualizza budget');view.value='month';await view.onchange();
+assert.ok(panel.textContent.includes('Riepilogo mensile'));assert.ok(panel.textContent.includes('Ore previste nel mese:'));assert.ok(panel.textContent.includes('Mese precedente'));
+const monthInput=panel.querySelectorAll('input').find(e=>e.attrs?.['aria-label']==='Mese da controllare');monthInput.value='2024-02';monthInput.onchange();for(let i=0;i<100;i++){if(panel.textContent.includes('Mese dal 01/02/2024 al 29/02/2024'))break;await new Promise(r=>setImmediate(r));}
+assert.ok(panel.textContent.includes('Mese dal 01/02/2024 al 29/02/2024'));assert.equal(panel.querySelectorAll('details').filter(e=>e.className?.startsWith('budget-line')).length,29);assert.ok(panel.textContent.includes('Giovedì 01/02/2024'));
+const back=panel.querySelectorAll('select').find(e=>e.attrs?.['aria-label']==='Visualizza budget');back.value='week';await back.onchange();assert.ok(panel.textContent.includes('Riepilogo settimanale'));assert.equal(panel.querySelectorAll('details').filter(e=>e.className?.startsWith('budget-line')).length,7);
+console.log('PASS switching weekly/monthly, leap-month selection, correct weekday headings, return to weekly view');

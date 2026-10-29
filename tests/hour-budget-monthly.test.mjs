@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {monthRange,monthlyBudget} from '../hour-budget-core.js';
+assert.equal(monthRange('2026-10').start,'2026-10-01');assert.equal(monthRange('2026-10').end,'2026-10-31');assert.equal(monthRange('2026-10').days.length,31);
+assert.equal(monthRange('2024-02').days.length,29);assert.equal(monthRange('2025-02').days.length,28);assert.equal(monthRange('2100-02').days.length,28);assert.equal(monthRange('2000-02').days.length,29);assert.equal(monthRange('2026-04').days.length,30);assert.throws(()=>monthRange('2026-13'));assert.throws(()=>monthRange('2026-2'));
+const base={people:[{person_key:'p',surname:'Fittizio',given_name:''}],configs:{p:{schedules:[{from:'2020-01-01',hours:['3.66','3.66','3.66','3.66','3.66','0','0'],confirmed:true}]}},assignments:[{person_key:'p',valid_from:'2020-01-01',included:true,workplace:'A'}],records:[],checks:[{month:'2026-10',confirmed:true}],month:'2026-10',workplace:'A',today:'2026-10-15'};
+let r=monthlyBudget(base);assert.equal(r.budget,4831.2);assert.equal(r.days.length,31);assert.equal(r.status,'progress');assert.equal(r.futureCount,16);assert.equal(r.days[0].day,'2026-10-01');assert.equal(r.days.at(-1).day,'2026-10-31');
+r=monthlyBudget({...base,today:'2026-09-30'});assert.equal(r.status,'future');assert.equal(r.actual,0);assert.equal(r.budget,4831.2);
+r=monthlyBudget({...base,today:'2026-11-01'});assert.equal(r.status,'partial');assert.ok(r.incomplete);
+r=monthlyBudget({...base,calendar:[{day:'2026-10-01',workplace:'A',minutes:0}],today:'2026-11-01'});assert.equal(r.budget,4611.6);
+const allDays=monthRange('2026-10').days,transfer={...base,today:'2026-11-01',configs:{p:{schedules:[{from:'2020-01-01',hours:Array(7).fill('2.86'),confirmed:true},{from:'2026-10-21',hours:Array(7).fill('4'),confirmed:true}]}},assignments:[...base.assignments,{person_key:'p',valid_from:'2026-10-16',included:true,workplace:'B'}],records:allDays.map(day=>({person_key:'p',day,confirmed:true,allocations:[{workplace:day<'2026-10-16'?'A':'B',ordinary:180,overtime:0}]}))};
+r=monthlyBudget(transfer);assert.equal(r.budget,2574);assert.equal(r.actual,2700);assert.equal(r.status,'over');assert.equal(r.difference,126);
+r=monthlyBudget({...transfer,workplace:'B'});assert.equal(r.budget,3498);assert.equal(r.actual,2880);assert.equal(r.status,'saving');assert.equal(r.difference,-618);
+console.log('PASS exact calendar month bounds, leap years, decimal hours, current/future/incomplete states, overrides, dated transfers and mid-month schedules');
