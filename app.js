@@ -1,4 +1,5 @@
-import './app-version.js?v=71';
+import {createPresenceConsole} from './presence-ui.js?v=72';
+import './app-version.js?v=72';
 import {createColleagueUpload} from './colleague-upload.js?v=66';
 import {createHourBudget} from './hour-budget-ui.js?v=70';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -82,7 +83,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){accountMenu.refresh(on);queueMicrotask(()=>{pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
+function showLogged(on){accountMenu.refresh(on);queueMicrotask(()=>{pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin')}
 const passwordRecovery=setupPasswordRecovery({getClient:()=>authClient,onComplete:async()=>{session=null;profile=null;await reloadAccount();},notice:appNotice});
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -518,6 +519,7 @@ refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){awa
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const adminMessages=createAdminMessages({getSession:()=>session,getProfile:()=>profile,openSettings:()=>notificationCenter.openSettings()});
 const colleagueUpload=createColleagueUpload({getSession:()=>session,getProfile:()=>profile,getClient:()=>sb});
+const presenceConsole=createPresenceConsole({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const hourBudget=createHourBudget({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const leaveCalculator=createLeaveCalculator({getSession:()=>session,getProfile:()=>profile});
 const accountMenu=createAccountMenu({getSession:()=>session});

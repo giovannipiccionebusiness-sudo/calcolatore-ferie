@@ -9,7 +9,7 @@ export function latestSheet(documents,account,day,personKey=null){return documen
 export function assemblePeople(imported,accounts,registry){
  const people=[],aliases=[],keys=new Set();
  for(const p of imported){const hire=registry.find(r=>r.account_id&&r.account_id===p.account_id);const key=hire?.person_key||p.person_key;if(keys.has(key))continue;keys.add(key);people.push({...p,person_key:key,imported_key:p.person_key,new_hire:!!hire});if(hire)aliases.push({from:p.person_key,to:key});}
- for(const r of registry.filter(r=>r.account_id)){if(keys.has(r.person_key))continue;const a=accounts.find(a=>a.id===r.account_id);if(!a)continue;keys.add(r.person_key);people.push({person_key:r.person_key,account_id:r.account_id,surname:a.full_name,given_name:'',site:'N153',new_hire:true});}
+ for(const r of registry.filter(r=>r.account_id)){if(keys.has(r.person_key))continue;const a=accounts.find(a=>a.id===r.account_id&&a.site==='N153');if(!a)continue;keys.add(r.person_key);people.push({person_key:r.person_key,account_id:r.account_id,surname:a.full_name,given_name:'',site:'N153',new_hire:true});}
  return {people,aliases};
 }
 export function registryWarnings({people,accounts=[],assignments,days,aliases=[]}){

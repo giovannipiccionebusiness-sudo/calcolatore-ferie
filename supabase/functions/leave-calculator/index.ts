@@ -18,6 +18,12 @@ Deno.serve(async req=>{
    const data=await snapshot(user.id,key);if(body.action==='simulate'&&body.input?.start<new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()))throw Error('Scegli una data di partenza futura');return reply(body.action==='snapshot'?data:project(data,body.input||{}));
   }
   if(!admin)return reply({error:'Operazione riservata all’amministratore'},403);
+  if(body.action==='attendance_roster'){
+   async function rows(table:string,columns:string,order:string){let out:any[]=[];for(let offset=0;;offset+=500){const {data,error}=await db.from(table).select(columns).order(order).range(offset,offset+499);if(error)throw error;out.push(...(data||[]));if(!data||data.length<500)return out;}}
+   const [people,accounts,configs]=await Promise.all([rows('leave_people','person_key,surname,given_name,site,account_id','person_key'),rows('profiles','id,full_name,site,active','id'),rows('leave_config','person_key,data,version','person_key')]);
+   const workerIds=new Set((await rows('profiles','id,role','id')).filter(p=>p.role==='worker').map(p=>p.id));
+   return reply({people,accounts:accounts.filter(a=>workerIds.has(a.id)),configs:configs.map(r=>({person_key:r.person_key,version:r.version,data:{schedules:r.data?.schedules||[],day_overrides:r.data?.day_overrides||[]}}))});
+  }
   if(body.action==='roster'){
    const [people,accounts,reports]=await Promise.all([db.from('leave_people').select('*').order('surname'),db.from('profiles').select('id,full_name,site,active').eq('role','worker').order('full_name'),db.from('leave_reports').select('id,period,file_name,created_at').order('period',{ascending:false})]);if(people.error||accounts.error||reports.error)throw people.error||accounts.error||reports.error;return reply({people:people.data,accounts:accounts.data,reports:reports.data});
   }
