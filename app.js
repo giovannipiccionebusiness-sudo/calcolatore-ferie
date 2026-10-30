@@ -522,7 +522,7 @@ const colleagueUpload=createColleagueUpload({getSession:()=>session,getProfile:(
 const presenceConsole=createPresenceConsole({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const hourBudget=createHourBudget({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const leaveCalculator=createLeaveCalculator({getSession:()=>session,getProfile:()=>profile});
-const accountMenu=createAccountMenu({getSession:()=>session});
+const accountMenu=createAccountMenu({getSession:()=>session,getProfile:()=>profile});
 const notificationCenter=createNotificationCenter({getSession:()=>session,onOpenTask:openAdminNotificationTask});
 const pushControls=createPushControls({getSession:()=>session,mount:notificationCenter.host,getProfile:()=>profile,openSettings:()=>notificationCenter.openSettings()});
 notificationCenter.setControls(pushControls);
