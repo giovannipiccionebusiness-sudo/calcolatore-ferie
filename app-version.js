@@ -1,7 +1,8 @@
 // Updates are offered only when newer code is available; work is never reloaded automatically.
 export const APP_VERSION=71;
+export const APP_VERSION_LABEL='7.1';
 export function installVersionControls(){
- const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Versione '+APP_VERSION;
+ const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Lavoro Facile · Versione '+APP_VERSION_LABEL;
  (document.querySelector('main')||document.body).append(footer);
  const style=document.createElement('style');style.textContent='.app-version-footer{text-align:center;margin:24px 0 8px;color:#72827f;font:12px system-ui}.app-update-dialog{box-sizing:border-box;width:min(460px,calc(100vw - 32px));max-height:85dvh;overflow:auto;padding:24px;border:0;border-radius:22px;background:#fff;color:#173f3a;box-shadow:0 18px 60px #0004}.app-update-dialog::backdrop{background:#102d3299}.app-update-dialog h2{font-size:22px;margin:0 0 14px}.app-update-dialog p{line-height:1.5}.app-update-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.app-update-actions button{flex:1;min-height:46px;padding:12px;border:1px solid #badbd2;border-radius:12px;background:#eff9f6;color:#075d52;font:inherit;font-weight:700;cursor:pointer}.app-update-actions button:last-child{background:#087e71;color:#fff}';document.head.append(style);
  let latest=APP_VERSION,dismissed=APP_VERSION,dialog=null,checking=false;
