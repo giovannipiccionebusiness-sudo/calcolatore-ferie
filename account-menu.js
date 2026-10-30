@@ -1,4 +1,5 @@
-export function createAccountMenu({getSession}){
+import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
+export function createAccountMenu({getSession,getProfile=()=>null}){
  const logged=document.getElementById('loggedArea'),card=logged.closest('section'),status=document.getElementById('appMsg');
  const style=document.createElement('style');style.textContent=`
  .account-menu-button{position:fixed;right:max(14px,env(safe-area-inset-right));top:calc(max(12px,env(safe-area-inset-top)) + 56px);z-index:1000;width:46px;height:46px;border:1px solid #c5dfd8;border-radius:50%;background:#fff;color:#087568;box-shadow:0 3px 16px #134f4720;display:grid;place-items:center;cursor:pointer}.account-menu-button[hidden]{display:none}.account-menu-button svg{width:25px;height:25px}
@@ -10,10 +11,13 @@ export function createAccountMenu({getSession}){
  const live=document.createElement('p');live.className='account-live-status';live.setAttribute('role','status');live.setAttribute('aria-live','polite');
  // Move the original controls: keep existing auth handlers and element IDs.
  card.after(status);status.classList.add('account-page-status');dialog.append(header,logged,live);document.body.append(dialog);
- let active=false;
- icon.onclick=()=>{if(!active||!getSession()||dialog.open)return;live.textContent=status.textContent;dialog.showModal();icon.setAttribute('aria-expanded','true');};
+ const employeeNumber=document.createElement('p');employeeNumber.className='account-live-status';employeeNumber.setAttribute('aria-live','polite');employeeNumber.hidden=true;logged.after(employeeNumber);
+ let active=false,numberRequest=0;
+ async function loadEmployeeNumber(){const session=getSession(),profile=getProfile();const token=++numberRequest;employeeNumber.hidden=profile?.role!=='worker';if(employeeNumber.hidden)return;if(!profile?.active){employeeNumber.textContent='Matricola: disponibile dopo l’abilitazione';return;}employeeNumber.textContent='Matricola: caricamento…';try{const response=await fetch(SUPABASE_URL+'/functions/v1/leave-calculator',{method:'POST',headers:{apikey:SUPABASE_ANON_KEY,'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'snapshot'}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(token!==numberRequest||getSession()?.user.id!==session.user.id||!active)return;if(!response.ok)throw Error('Matricola non disponibile');const value=data.person?.matricola;employeeNumber.textContent=value!=null&&String(value).trim()?'Matricola: '+String(value).trim():'Matricola non ancora associata';}catch{if(token===numberRequest&&active&&getSession()?.user.id===session.user.id)employeeNumber.textContent='Matricola non disponibile. Riapri l’account per riprovare.';}}
+
+ icon.onclick=()=>{if(!active||!getSession()||dialog.open)return;live.textContent=status.textContent;dialog.showModal();icon.setAttribute('aria-expanded','true');loadEmployeeNumber();};
  close.onclick=()=>dialog.close();dialog.addEventListener('close',()=>{icon.setAttribute('aria-expanded','false');if(!icon.hidden)icon.focus({preventScroll:true});else document.getElementById('loginBtn')?.focus({preventScroll:true});});
  dialog.addEventListener('click',event=>{if(event.target!==dialog)return;const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close();});
  new MutationObserver(()=>{if(dialog.open)live.textContent=status.textContent;}).observe(status,{childList:true,characterData:true,subtree:true});
- return {refresh(on){active=!!on&&!!getSession();icon.hidden=!active;card.classList.toggle('hidden',active);if(!active&&dialog.open)dialog.close();}};
+ return {refresh(on){active=!!on&&!!getSession();icon.hidden=!active;card.classList.toggle('hidden',active);if(!active){numberRequest++;employeeNumber.textContent='';employeeNumber.hidden=true;if(dialog.open)dialog.close();}}};
 }
