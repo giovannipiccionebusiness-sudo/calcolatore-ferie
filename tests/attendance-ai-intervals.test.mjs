@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {clockMinutes,intervalDuration,validateResult} from '../supabase/functions/attendance-ai/attendance-ai-intervals.js';
+const row={day:1,entry_1:'08:00',exit_1:'11:40',entry_2:null,exit_2:null,row_state:'worked',cause:'',absence_text:null,uncertain:false};
+assert.equal(intervalDuration(row).total_minutes,220);
+assert.equal(intervalDuration({...row,entry_1:'08:00',exit_1:'12:00',entry_2:'13:00',exit_2:'16:00'}).total_minutes,420);
+for(const changed of [{entry_1:null,exit_1:null},{entry_1:null},{row_state:'blank'},{uncertain:true},{exit_1:'07:00'},{entry_2:'10:00',exit_2:'12:00'},{exit_1:'11:70'}])assert.equal(intervalDuration({...row,...changed}).total_minutes,null);
+assert.equal(clockMinutes('24:00'),1440);assert.equal(clockMinutes('24:01'),null);assert.equal(clockMinutes('8'),null);
+const blank={...row,entry_1:null,exit_1:null,row_state:'blank',total_minutes:999,total_text:'9,00'};
+const result=validateResult({month:'ottobre 2026',worker_name:'Esempio',monthly_total_text:null,rows:[row, {...blank,day:2}]},'2026-10');
+assert.equal(result.rows[0].total_minutes,220);assert.equal(result.rows[1].total_minutes,null);assert.equal(result.method,'intervals');
+assert.throws(()=>validateResult({month:'2026-10',worker_name:'Esempio',monthly_total_text:null,rows:[row,row]},'2026-10'));
+console.log('Interval duration, two shifts, blank/incomplete rows, uncertainty, overlap and duplicate days passed');
