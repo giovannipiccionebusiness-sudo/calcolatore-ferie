@@ -10,13 +10,15 @@ export function assembleRoster(imported,accounts,registry){
 export function periodWeeks(month){const r=monthRange(month),out=[];for(const day of r.days){const w=weekRange(day);if(!out.some(x=>x.start===w.start))out.push({...w,monthDays:w.days.filter(x=>x.startsWith(month))});}return out;}
 export function indexState(state){state.cellCache=new Map();return state;}
 export function assignment(state,p,day){if(p.site!=='N153')return {included:true,workplace:p.site};return effective(state.assignments.filter(x=>x.person_key===p.person_key),day);}
-export function sheetFor(state,p,day){return latestSheet(state.documents,p.account_id,day,p.imported_key||p.person_key);}
+export function sheetFor(state,p,day){return latestSheet(state.documents.filter(d=>!(state.autoJobs||[]).some(j=>j.document_id===d.id)||d.stage==='final'||d.week_ending&&weekRange(d.week_ending).start<=day),p.account_id,day,p.imported_key||p.person_key);}
 export function cell(state,p,day,today){
  const key=p.person_key+'|'+day+'|'+today;if(state.cellCache?.has(key))return state.cellCache.get(key);
  const record=state.records.find(r=>r.person_key===p.person_key&&r.day===day),sheet=sheetFor(state,p,day),a=assignment(state,p,day);
  const valid=day<=today&&!!record?.confirmed&&(!record.document_id||record.document_id===sheet?.id);
  const ordinary=valid?(record.allocations||[]).reduce((s,x)=>s+Number(x.ordinary),0):0,extra=valid?(record.allocations||[]).reduce((s,x)=>s+Number(x.overtime),0):0;
- const result={day,record,sheet,valid,ordinary,extra,worked:ordinary+extra,absence:valid?record.absence_minutes||0:0,justification:valid?record.justification||'':'',expected:scheduled(state.configs[p.person_key],day),assignment:a,status:day>today?'future':a?.included===false&&!record?'excluded':valid?'verified':record?'stale':sheet?'received':'missing'};state.cellCache?.set(key,result);return result;
+ const proposed=!record&&day<=today&&sheet?(state.autoRows||[]).find(r=>r.document_id===sheet.id&&r.day===day)?.reading:null;
+ const expected=scheduled(state.configs[p.person_key],day),proposal=proposed?{...proposed,documentId:sheet.id,ordinary:proposed.total_minutes!==null&&expected!==null&&!proposed.uncertain?Math.min(proposed.total_minutes,Math.round(expected)):null,supplementary:proposed.total_minutes!==null&&expected!==null&&!proposed.uncertain?Math.max(0,proposed.total_minutes-Math.round(expected)):null}:null;
+ const result={day,record,sheet,valid,proposal,ordinary,extra,worked:ordinary+extra,absence:valid?record.absence_minutes||0:0,justification:valid?record.justification||'':'',expected:scheduled(state.configs[p.person_key],day),assignment:a,status:day>today?'future':a?.included===false&&!record?'excluded':valid?'verified':record?'stale':proposal?(proposal.ordinary===null?'ai-review':'provisional'):sheet?'received':'missing'};state.cellCache?.set(key,result);return result;
 }
 export function fingerprint(state,p,days,today){return JSON.stringify(days.map(day=>{const c=cell(state,p,day,today);return [day,c.valid,c.record?.version||0,c.record?.document_id||null,c.sheet?.id||null,c.worked,c.absence,c.justification];}));}
 export function workerPeriod(state,p,days,today){const cells=days.map(d=>cell(state,p,d,today));return {cells,worked:cells.reduce((n,c)=>n+c.worked,0),ordinary:cells.reduce((n,c)=>n+c.ordinary,0),extra:cells.reduce((n,c)=>n+c.extra,0),complete:cells.every(c=>c.valid||c.status==='excluded'),missing:cells.filter(c=>!c.valid&&c.status!=='excluded').length};}
@@ -37,3 +39,4 @@ export function summarizeSite(state,site,workplace,days,today){
  return {budget,actual,difference:actual-budget,missing,unknown,unassigned,complete,confirmed,future:days.some(d=>d>today)};
 }
 export function totalSites(rows){return {budget:rows.reduce((n,r)=>n+r.budget,0),actual:rows.reduce((n,r)=>n+r.actual,0),difference:rows.reduce((n,r)=>n+r.difference,0),complete:rows.every(r=>r.complete)};}
+
