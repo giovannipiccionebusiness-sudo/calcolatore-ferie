@@ -1,4 +1,10 @@
 export const CAUSES={'':'Nessuna',F:'Ferie',M:'Malattia',L104:'Legge 104',PHR:'ROL / permesso','congedo parentale':'Congedo parentale'};
+// The app displays decimal hours rounded to two decimals. Recover exact whole minutes.
+export function decimalMinutes(value){
+ const s=String(value).trim().replace(',','.');
+ if(!/^\d{1,3}(?:\.\d{1,2})?$/.test(s))throw Error('Inserisci ore decimali valide, massimo due cifre dopo la virgola');
+ const n=Number(s);if(n<0||n>24)throw Error('Le ore del giorno devono essere tra 0 e 24');return Math.round(n*60);
+}
 export function causeCode(text){
  const s=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.,]/g,' ');
  const matches=[];
