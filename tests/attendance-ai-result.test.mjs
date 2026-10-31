@@ -23,3 +23,5 @@ const {decimalMinutes,splitWorked}=await import('../attendance-reader-core.js');
 assert.equal(decimalMinutes('3,67'),220);assert.equal(decimalMinutes('0,67'),40);
 const split=splitWorked(220,180);assert.equal(split.ordinary,180);assert.equal(split.supplementary,40);
 console.log('Paper 3,40 -> 220 exact minutes -> app 3,67; O 3,00 / S 0,67 passed');
+
+assert.equal(sheetMinutes('6 20'),380);assert.equal(sheetMinutes('5 60'),null);

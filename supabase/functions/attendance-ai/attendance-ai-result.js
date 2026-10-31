@@ -5,7 +5,7 @@ RESULT_SCHEMA.required.push('monthly_total_text');RESULT_SCHEMA.properties.month
 const rowSchema=RESULT_SCHEMA.properties.rows.items;
 rowSchema.required.push('total_text','absence_text');rowSchema.properties.total_text=rawText;rowSchema.properties.absence_text=rawText;
 export function sheetMinutes(raw,max=1440){
- if(raw==null)return null;const s=String(raw).trim();let m=s.match(/^(\d{1,3})(?:\s*[,.:]\s*(\d{2}))?$/);if(!m)return null;
+ if(raw==null)return null;const s=String(raw).trim();let m=s.match(/^(\d{1,3})(?:(?:\s*[,.:]\s*|\s+)(\d{2}))?$/);if(!m)return null;
  const minutes=Number(m[2]||0);if(minutes>59)return null;const total=Number(m[1])*60+minutes;return total<=max?total:null;
 }
 export function normalizeMonth(value){

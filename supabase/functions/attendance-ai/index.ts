@@ -12,20 +12,24 @@ Deno.serve(async req=>{
  let docId:string|null=null,lease:string|null=null;
  try{
   const token=req.headers.get('Authorization')?.replace(/^Bearer\s+/i,'')||'',actor=await admin(token);if(!actor)return reply({error:'Accesso amministratore necessario'},403);
-  if(Number(req.headers.get('content-length')||0)>2048)return reply({error:'Richiesta troppo grande'},413);
+  if(Number(req.headers.get('content-length')||0)>6000000)return reply({error:'Richiesta troppo grande'},413);
   const body=await req.json();const key=Deno.env.get('OPENAI_API_KEY');
   if(body.action==='status')return reply({configured:!!key});
-  if(!['read','reread'].includes(body.action)||!/^[-a-f0-9]{36}$/i.test(body.document_id||''))return reply({error:'Documento non valido'},400);
+  if(!['read','reread','deep'].includes(body.action)||!/^[-a-f0-9]{36}$/i.test(body.document_id||''))return reply({error:'Documento non valido'},400);
   if(!key)return reply({error:'Configura OPENAI_API_KEY nei Secrets di Supabase'},503);
   const {data:d,error}=await db.from('documents').select('id,category,review_status,month,file_path,file_name').eq('id',body.document_id).single();
   if(error||!d||d.category!=='presenze'||d.review_status==='rejected')return reply({error:'Foglio presenze non disponibile'},404);
-  if(body.action==='reread'){const old=await db.from('attendance_ai_drafts').select('prompt_version,status').eq('document_id',d.id).maybeSingle();if(old.error)throw Error('Bozza non disponibile');if(old.data?.status==='processing')return reply({error:'Lettura in corso: attendi prima di riprovare'},429);if(old.data&&old.data.prompt_version<2){const reset=await db.from('attendance_ai_drafts').update({status:'failed',attempts:1,prompt_version:2}).eq('document_id',d.id).eq('prompt_version',old.data.prompt_version).neq('status','processing');if(reset.error)throw Error('Impossibile preparare la nuova lettura');}else if(old.data)return reply({error:'La bozza usa già la lettura ore e minuti. Correggi i valori dubbi nella verifica del giorno.'},400);}
+  const deep=body.action==='deep';const details=deep?body.details:[];
+  if(deep&&(!Array.isArray(details)||details.length<1||details.length>6||details.some((x:any)=>typeof x!=='string'||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(x))||details.reduce((n:number,x:string)=>n+x.length,0)>4*1024*1024))return reply({error:'Dettagli immagine non validi'},400);
+  const targetVersion=deep?3:2;
+  if(body.action==='reread'||deep){const old=await db.from('attendance_ai_drafts').select('prompt_version,status').eq('document_id',d.id).maybeSingle();if(old.error)throw Error('Bozza non disponibile');if(old.data?.status==='processing')return reply({error:'Lettura in corso: attendi prima di riprovare'},429);if(old.data&&old.data.prompt_version<targetVersion){const reset=await db.from('attendance_ai_drafts').update({status:'failed',attempts:1,prompt_version:targetVersion}).eq('document_id',d.id).eq('prompt_version',old.data.prompt_version).neq('status','processing');if(reset.error)throw Error('Impossibile preparare la nuova lettura');}else if(old.data&&!deep)return reply({error:'La bozza usa già la lettura ore e minuti. Correggi i valori dubbi nella verifica del giorno.'},400);}
   const claim=await db.rpc('attendance_ai_claim',{p_document:d.id,p_path:d.file_path,p_admin:actor.id});if(claim.error)return reply({error:claim.error.message},429);
   if(claim.data.cached)return reply({...claim.data,document_id:d.id});docId=d.id;lease=claim.data.lease;
   const stored=await db.storage.from('private-documents').download(d.file_path);if(stored.error||!stored.data)throw Error('Originale non disponibile');if(stored.data.size>12*1024*1024)throw Error('Foglio oltre 12 MB: riduci il PDF o la foto');
   const bytes=new Uint8Array(await stored.data.arrayBuffer()),type=mime(bytes),url='data:'+type+';base64,'+base64(bytes);
   const content:any[]=[{type:'input_text',text:prompt}];content.push(type==='application/pdf'?{type:'input_file',filename:'presenze.pdf',file_data:url}:{type:'input_image',image_url:url,detail:'high'});
-  const model=Deno.env.get('ATTENDANCE_AI_MODEL')||'gpt-4.1-mini';
+  if(deep){content.push({type:'input_text',text:'Seguono ingrandimenti sovrapposti dello STESSO documento: ciascun gruppo di tre immagini mostra una pagina dall’alto verso il basso. Non sono fogli aggiuntivi. Leggi il numero GG stampato a sinistra di ciascuna riga e segui la linea fino a TOTALE. Non attribuire i valori contando la sequenza: domeniche e righe barrate possono essere vuote. Le righe ripetute negli ingrandimenti sono la stessa riga: restituisci ciascun giorno una sola volta. Verifica 00/10/20/30/40/50 in ogni cella; se dubbio usa null e uncertain=true.'});for(const image of details)content.push({type:'input_image',image_url:image,detail:'high'});}
+  const model=deep?'gpt-4.1':Deno.env.get('ATTENDANCE_AI_MODEL')||'gpt-4.1-mini';
   const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model,store:false,input:[{role:'user',content}],max_output_tokens:6500,text:{format:{type:'json_schema',name:'attendance_sheet',strict:true,schema:RESULT_SCHEMA}}}),signal:AbortSignal.timeout(110000)});
   if(!response.ok){const raw=await response.json().catch(()=>({}));const code=raw?.error?.code;throw Error(response.status===401||response.status===403?'Chiave API non valida o permessi insufficienti: verifica Risposte in scrittura e accesso al modello':response.status===429?'Credito o limiti OpenAI insufficienti: controlla fatturazione e limiti':response.status===400?'OpenAI non accetta questo documento o modello':'Servizio IA temporaneamente non disponibile');}
   const result=await response.json();if(result.status!=='completed')throw Error('Lettura incompleta: nessuna presenza salvata');
@@ -34,7 +38,7 @@ Deno.serve(async req=>{
   // Recheck access and source before persisting a draft. Never write actual attendance here.
   if(!await admin(token))throw Error('Sessione amministratore non più valida');
   const fresh=await db.from('documents').select('file_path,review_status').eq('id',d.id).single();if(fresh.error||fresh.data.file_path!==d.file_path||fresh.data.review_status==='rejected')throw Error('Il foglio è cambiato durante la lettura');
-  const save=await db.from('attendance_ai_drafts').update({status:'done',prompt_version:2,result:parsed,model,usage:result.usage,error_code:null}).eq('document_id',d.id).eq('lease_id',lease).select('document_id').single();if(save.error)throw Error('Impossibile conservare la bozza. Nessuna presenza salvata');
+  const save=await db.from('attendance_ai_drafts').update({status:'done',prompt_version:targetVersion,result:parsed,model,usage:result.usage,error_code:null}).eq('document_id',d.id).eq('lease_id',lease).select('document_id').single();if(save.error)throw Error('Impossibile conservare la bozza. Nessuna presenza salvata');
   return reply({document_id:d.id,cached:false,result:parsed,model,usage:result.usage});
  }catch(e){const message=e instanceof Error?e.message:'Errore lettura IA';if(docId&&lease)await db.from('attendance_ai_drafts').update({status:'failed',error_code:'READ_FAILED'}).eq('document_id',docId).eq('lease_id',lease);return reply({error:message},400);}
 });
