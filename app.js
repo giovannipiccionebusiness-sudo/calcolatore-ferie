@@ -1,4 +1,4 @@
-import {createPresenceConsole} from './presence-ui.js?v=72';
+import {createPresenceConsole} from './presence-ui.js?v=73';
 import './app-version.js?v=72';
 import {createColleagueUpload} from './colleague-upload.js?v=66';
 import {createHourBudget} from './hour-budget-ui.js?v=70';

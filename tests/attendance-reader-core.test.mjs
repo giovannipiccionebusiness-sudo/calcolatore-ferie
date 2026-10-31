@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {splitWorked,readTotal,causeCode} from '../attendance-reader-core.js';
+assert.deepEqual(splitWorked(420,240),{ordinary:240,supplementary:180,rounded:false});
+assert.deepEqual(splitWorked(180,240),{ordinary:180,supplementary:0,rounded:false});
+assert.equal(splitWorked(480,0).ordinary,0);
+assert.throws(()=>splitWorked(240,null));assert.throws(()=>splitWorked(-1,240));
+for(const value of ['', '4 8','4 ore','25','1,33','ferie'])assert.equal(readTotal(value),null);
+assert.equal(readTotal('4,50'),270);assert.equal(readTotal('0'),0);
+for(const [raw,expected]of [['FERIE','F'],['malattia','M'],['Legge 104/92','L104'],['L104','L104'],['congedo parentale','congedo parentale'],['ROL','PHR'],['R.O.L.','PHR'],['firma Mario',''],['ferie e malattia','']])assert.equal(causeCode(raw),expected);
+console.log('Attendance split and cause recognition checks passed');
