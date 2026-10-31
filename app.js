@@ -1,5 +1,5 @@
-import {createPresenceConsole} from './presence-ui.js?v=73';
-import './app-version.js?v=72';
+import {createPresenceConsole} from './presence-ui.js?v=74';
+import './app-version.js?v=74';
 import {createColleagueUpload} from './colleague-upload.js?v=66';
 import {createHourBudget} from './hour-budget-ui.js?v=70';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
