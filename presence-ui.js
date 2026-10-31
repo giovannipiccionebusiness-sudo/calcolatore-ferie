@@ -1,5 +1,5 @@
-import {selectAttendanceRows} from './attendance-row-crop.js?v=78';
-import {mountAIPreview} from './attendance-ai-ui.js?v=78';
+import {selectAttendanceRows} from './attendance-row-crop.js?v=79';
+import {mountAIPreview} from './attendance-ai-ui.js?v=79';
 import {causeCode,CAUSES,splitWorked,decimalMinutes} from './attendance-reader-core.js?v=75';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 import {N153_WORKPLACES} from './workplaces.js?v=61';
