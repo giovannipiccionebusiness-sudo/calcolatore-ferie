@@ -1,5 +1,5 @@
-import {readingDetails} from './attendance-ai-detail.js?v=76';
-import {mountAIPreview} from './attendance-ai-ui.js?v=77';
+import {selectAttendanceRows} from './attendance-row-crop.js?v=78';
+import {mountAIPreview} from './attendance-ai-ui.js?v=78';
 import {causeCode,CAUSES,splitWorked,decimalMinutes} from './attendance-reader-core.js?v=75';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 import {N153_WORKPLACES} from './workplaces.js?v=61';
@@ -103,7 +103,7 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
   const aiToken=epoch,aiOwner=getSession()?.user.id;
   mountAIPreview({parent:ui.content,documents:docs,month:month.value,name:fullName(p),valid:()=>allowed()&&epoch===aiToken&&getSession()?.user.id===aiOwner&&ui.d.isConnected,
    expected:day=>cell(state,p,day,today()).expected,openOriginal:d=>openSheet(d,ui),
-   read:async(d,force=false)=>{guard(aiOwner,aiToken);let details;if(force==='deep'||force==='intervals'){const original=await getClient().storage.from('private-documents').download(d.file_path);if(original.error)throw original.error;details=await readingDetails(original.data);guard(aiOwner,aiToken);}const session=getSession();const r=await fetch(SUPABASE_URL+'/functions/v1/attendance-ai',{method:'POST',headers:{apikey:SUPABASE_ANON_KEY,'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:force==='intervals'?'intervals':force==='deep'?'deep':force?'reread':'read',document_id:d.id,details}),signal:AbortSignal.timeout(130000)});const data=await r.json();guard(aiOwner,aiToken);if(!r.ok)throw Error(data.error||'Servizio IA non disponibile');return data;},
+   read:async(d,force=false)=>{guard(aiOwner,aiToken);let details;if(force==='rows'){const original=await getClient().storage.from('private-documents').download(d.file_path);if(original.error)throw original.error;details=await selectAttendanceRows(original.data);guard(aiOwner,aiToken);}const session=getSession();const r=await fetch(SUPABASE_URL+'/functions/v1/attendance-ai',{method:'POST',headers:{apikey:SUPABASE_ANON_KEY,'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:force==='rows'?'rows':'cached_rows',document_id:d.id,details}),signal:AbortSignal.timeout(130000)});const data=await r.json();guard(aiOwner,aiToken);if(!r.ok)throw Error(data.error||'Servizio IA non disponibile');return data;},
    openDay:(day,draft)=>{if(sheetFor(state,p,day)?.id!==draft.documentId){ui.message.textContent='Questo foglio non è il più recente per il giorno selezionato. Apri e leggi il foglio aggiornato.';return;}dayDialog(p,day,draft);}});
   const configuration=el('details');configuration.append(el('summary','Orario contrattuale e sede'));ui.content.append(configuration);const from=field(configuration,'Decorrenza','date',month.value+'-01'),config=state.configs[p.person_key]||{},existing=effective(config.schedules||[],month.value+'-01');if(existing)from.value=existing.from;
   const inputs=['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'].map((name,i)=>field(configuration,name+' · ore contrattuali','text',existing?.hours?.[i]??''));const confirmHours=field(configuration,'Confermo gli orari contrattuali','checkbox');
