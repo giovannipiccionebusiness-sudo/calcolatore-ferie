@@ -105,9 +105,8 @@ Deno.serve(async req=>{
   if(body.action==='subscribe'){
    if(body.keys&&!validKeys(body.keys))return reply({error:'Chiavi del telefono non valide. Disattiva e riattiva gli avvisi.'},400);
    if(body.scope&&!['production','test'].includes(body.scope))return reply({error:'App non valida.'},400);
-   if(existing&&body.keys){const {error:e}=await db.from('test_push_subscriptions').update({push_keys:body.keys,app_scope:body.scope||'production'}).eq('id',existing.id).eq('user_id',user.id);if(e)throw e;}
-
-   if(!existing){const {count}=await db.from('test_push_subscriptions').select('id',{count:'exact',head:true}).eq('user_id',user.id);if((count||0)>=5)return reply({error:'Hai già attivato cinque dispositivi.'},400);const {error:e}=await db.from('test_push_subscriptions').insert({user_id:user.id,endpoint:body.endpoint,activation_seen:profile.active,push_keys:body.keys||null,app_scope:body.scope||null});if(e)throw e;}
+   const {error:registrationError}=await db.rpc('register_scoped_push',{p_user:user.id,p_endpoint:body.endpoint,p_scope:body.scope||'production',p_keys:body.keys||null,p_active:profile.active});
+   if(registrationError){if(registrationError.message?.includes('SCOPED_DEVICE_LIMIT'))return reply({error:body.scope==='test'?'Hai già attivato cinque dispositivi nell’app di test. Disattiva gli avvisi su uno che non usi più, poi riprova.':'Hai già attivato cinque dispositivi nell’app ufficiale. Disattiva gli avvisi su uno che non usi più, poi riprova.',code:'DEVICE_LIMIT'},409);if(registrationError.message?.includes('ENDPOINT_OWNED_BY_OTHER_ACCOUNT'))return reply({error:'Questo telefono è associato a un altro account. Disattiva prima le sue notifiche.'},409);throw registrationError;}
    return reply({ok:true});
   }
   if(!existing)return reply({error:'Attiva prima le notifiche.'},400);
