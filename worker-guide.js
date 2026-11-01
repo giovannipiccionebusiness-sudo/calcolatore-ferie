@@ -60,18 +60,27 @@ if(worker&&startButton){
   if(container){container.prepend(panel);return;}
   startButton.after(panel);
  }
+ function keepTargetVisible(target){
+  if(!target){panel.scrollIntoView({behavior:'smooth',block:'nearest'});return;}
+  const scroller=target.closest('.worker-menu-content,.wc-body');
+  if(scroller&&scroller.contains(target)){
+   const tr=target.getBoundingClientRect(),sr=scroller.getBoundingClientRect();let offset=0;
+   if(tr.top<sr.top+12)offset=tr.top-(sr.top+16);else if(tr.bottom>sr.bottom-12)offset=tr.bottom-(sr.bottom-16);
+   if(offset)scroller.scrollBy({top:offset,behavior:'smooth'});
+  }else if(!target.closest('dialog[open]'))panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+ }
  function render(){
   const steps=guideSteps(kind,formMode),step=steps[index];if(!step)return;
   count.textContent='Passaggio '+(index+1)+' di '+steps.length;title.textContent=step.title;copy.textContent=step.text;back.disabled=index===0;next.disabled=index===steps.length-1;
   unmark();const target=findTarget(step.target);
   if(target)revealWorkerTarget(target);
   mountPanel(target);panel.hidden=false;
-  if(target)target.classList.add('worker-guide-target');panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  if(target)target.classList.add('worker-guide-target');keepTargetVisible(target);
   title.focus({preventScroll:true});
  }
  function start(nextKind='presenze',options={}){
   const raw=nextKind||select.value;kind=normKind(raw);formMode=raw==='daily-form'||!!options.form;select.value=kind;
-  previousFocus=options.focus||document.activeElement;index=0;storage(key('seen',kind),'1');panel.hidden=false;document.body.classList.add('worker-guide-active');render();
+  previousFocus=options.focus||document.activeElement;panel.classList.toggle('worker-guide-contextual',previousFocus!==startButton);index=0;storage(key('seen',kind),'1');panel.hidden=false;document.body.classList.add('worker-guide-active');render();
  }
  function autoStart(nextKind,options={}){
   if(!currentUser||!isActiveWorker||storage(key('automatic'))!=='1')return false;

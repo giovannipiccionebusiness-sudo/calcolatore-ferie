@@ -1,6 +1,6 @@
 // Updates are offered only when newer code is available; work is never reloaded automatically.
-export const APP_VERSION=81;
-export const APP_VERSION_LABEL='8.1';
+export const APP_VERSION=82;
+export const APP_VERSION_LABEL='8.2';
 export function installVersionControls(){
  const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Lavoro Facile · Versione '+APP_VERSION_LABEL;
  (document.querySelector('main')||document.body).append(footer);
