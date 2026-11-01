@@ -1,6 +1,6 @@
 // Updates are offered only when newer code is available; work is never reloaded automatically.
-export const APP_VERSION=86;
-export const APP_VERSION_LABEL='8.6';
+export const APP_VERSION=87;
+export const APP_VERSION_LABEL='8.7';
 export function installVersionControls(){
  const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Lavoro Facile · Versione '+APP_VERSION_LABEL;
  (document.querySelector('main')||document.body).append(footer);
@@ -17,8 +17,24 @@ export function installVersionControls(){
   later.onclick=close;dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
   update.onclick=async()=>{
    if(updating)return;updating=true;later.disabled=update.disabled=true;status.textContent='Aggiornamento dell’app…';
-   try{const registration=await navigator.serviceWorker?.getRegistration();await registration?.update();}catch{/* Reload the current release even if the worker check fails. */}
-   const url=new URL(location.href);url.searchParams.set('versione',String(latest));location.replace(url.href);
+   try{
+    const serviceWorker=navigator.serviceWorker,registration=await serviceWorker?.getRegistration();
+    if(registration&&serviceWorker){
+     const currentController=serviceWorker.controller;
+     const controllerChanged=new Promise(resolve=>{
+      if(!currentController){resolve(true);return;}
+      const finish=value=>{clearTimeout(timer);serviceWorker.removeEventListener('controllerchange',onChange);resolve(value);};
+      const onChange=()=>finish(true),timer=setTimeout(()=>finish(false),15000);
+      serviceWorker.addEventListener('controllerchange',onChange,{once:true});
+     });
+     await registration.update();
+     if(!await controllerChanged){
+      await registration.unregister();
+      if(window.caches){const names=await caches.keys();await Promise.all(names.filter(name=>name.startsWith('ferie-facili-production-')).map(name=>caches.delete(name)));}
+     }
+    }
+   }catch{/* The versioned reload below fetches the current app files. */}
+   const url=new URL(location.href);url.searchParams.set('versione',String(latest));url.searchParams.set('aggiornamento',String(Date.now()));location.replace(url.href);
   };
   actions.append(later,update);dialog.append(title,text,status,actions);document.body.append(dialog);dialog.showModal();later.focus();
  }
