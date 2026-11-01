@@ -10,6 +10,17 @@ export function guideSteps(kind='presenze',form=false){
   {title:'Apri l’inserimento',text:'Premi “Inserisci variazioni”. Seleziona poi “Supplementare” oppure “Assenza”: puoi indicarne una sola per giornata.',target:'dpCompile'},
   {title:'Riepilogo settimanale',text:'Apri il riepilogo per controllare le giornate già inserite e confermare quelle passate.',target:'[data-guide="daily-summary"]'}
  ];
+ if(kind==='colleague')return [
+  {title:'Carica per un collega',text:'Tocca il pulsante indicato. Scegli il collega, il mese e il documento; per le presenze seleziona settimanale o definitivo, poi carica la foto o il PDF.',target:'uploadColleagueButton'}
+ ];
+ if(kind==='uploads')return [
+  {title:'Controlla i tuoi invii',text:'Apri “I miei caricamenti”. Qui trovi i documenti inviati e puoi controllare se sono in verifica, verificati o respinti.',target:'docList'},
+  {title:'Leggi lo stato',text:'Lo stato indica a che punto è il controllo del responsabile. Se un invio è respinto, leggi il motivo prima di caricarlo di nuovo.',target:'docList'}
+ ];
+ if(kind==='messages')return [
+  {title:'Apri i messaggi',text:'Qui ricevi gli esiti e i solleciti del responsabile.',target:'workerMessagesPanel'},
+  {title:'Leggi il messaggio',text:'Apri il messaggio per leggere l’esito o capire quale documento manca.',target:'myNotifications'}
+ ];
  if(kind==='other')return [
   {title:'Scegli il documento',text:'Seleziona il modulo che vuoi inviare. Per il congedo parentale puoi aggiungere più pagine in un unico PDF.',target:'docType'},
   {title:'Indica il periodo',text:'Per ferie e ROL scrivi le date richieste. Non inserire diagnosi o altri dettagli sanitari nelle note.',target:'docNote'},
@@ -31,16 +42,14 @@ export function guideSteps(kind='presenze',form=false){
   {title:'Controlla lo stato',text:'Cerca l’invio in “I miei caricamenti”. “In verifica” significa che il responsabile deve ancora controllarlo.',target:'docList'}
  ];
 }
-const worker=document.getElementById('workerArea'),startButton=document.getElementById('startWorkerGuide');
-if(worker&&startButton){
+const worker=document.getElementById('workerArea');
+if(worker){
  let index=0,kind='presenze',formMode=false,previousFocus=null,currentUser='',isActiveWorker=false,welcome=null;
  const make=(tag,text,cls)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;};
  const panel=make('section',null,'worker-guide-panel');panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','Guida interattiva');panel.setAttribute('aria-live','polite');
- const label=make('label','Percorso'),select=make('select',null,'doc-select');select.id='workerGuideKind';label.htmlFor=select.id;
- for(const [value,text]of [['presenze','Foglio presenze'],['daily','Ore in più e assenze'],['other','Altri documenti'],['modules','Moduli da scaricare']]){const o=make('option',text);o.value=value;select.append(o);}
  const count=make('p',null,'worker-guide-count'),title=make('h3',null,'worker-guide-title'),copy=make('p',null,'worker-guide-copy'),controls=make('div',null,'worker-guide-controls');
  const back=make('button','Indietro'),next=make('button','Avanti'),disable=make('button','Non mostrare più'),close=make('button','Chiudi guida');
- for(const b of [back,next,disable,close])b.type='button';title.tabIndex=-1;controls.append(back,next,disable,close);panel.append(label,select,count,title,copy,controls);document.body.append(panel);
+ for(const b of [back,next,disable,close])b.type='button';title.tabIndex=-1;controls.append(back,next,disable,close);panel.append(count,title,copy,controls);document.body.append(panel);
  const storage=(key,value)=>{try{if(value===undefined)return localStorage.getItem(key);localStorage.setItem(key,value);return value;}catch{return null;}};
  const key=(part,k='')=>'lavorofacile-guide:'+currentUser+':'+part+(k?':'+k:'');
  const normKind=value=>value==='daily-form'?'daily':value;
@@ -52,13 +61,14 @@ if(worker&&startButton){
   if(previousFocus?.isConnected&&!worker.classList.contains('hidden'))previousFocus.focus({preventScroll:true});
  }
  function mountPanel(target){
+  if(target?.id==='uploadColleagueButton'){const row=target.closest('.colleague-upload-row');if(row){row.before(panel);return;}}
   const dialog=target?.closest('dialog[open]');
   if(dialog?.id==='presenceDialog'){const content=dialog.querySelector('.worker-menu-content');dialog.insertBefore(panel,content||null);return;}
   if(dialog?.classList.contains('wc-dialog')){const head=dialog.querySelector('.wc-head');if(head)head.after(panel);else dialog.prepend(panel);return;}
   const section=target?.closest('#workerArea details.worker-section,#workerPresencePanel,#dailyPresencePanel');
   const container=section?.matches('details.worker-section')?section.querySelector('.worker-menu-content'):section;
   if(container){container.prepend(panel);return;}
-  startButton.after(panel);
+  worker.prepend(panel);
  }
  function keepTargetVisible(target){
   if(!target){panel.scrollIntoView({behavior:'smooth',block:'nearest'});return;}
@@ -71,7 +81,7 @@ if(worker&&startButton){
  }
  function render(){
   const steps=guideSteps(kind,formMode),step=steps[index];if(!step)return;
-  count.textContent='Passaggio '+(index+1)+' di '+steps.length;title.textContent=step.title;copy.textContent=step.text;back.disabled=index===0;next.disabled=index===steps.length-1;
+  count.textContent='Passaggio '+(index+1)+' di '+steps.length;title.textContent=step.title;copy.textContent=step.text;back.disabled=index===0;next.disabled=index===steps.length-1&&kind!=='colleague';next.textContent=kind==='colleague'?'Apri caricamento':'Avanti';
   unmark();const target=findTarget(step.target);
   if(target)revealWorkerTarget(target);
   mountPanel(target);panel.hidden=false;
@@ -79,8 +89,8 @@ if(worker&&startButton){
   title.focus({preventScroll:true});
  }
  function start(nextKind='presenze',options={}){
-  const raw=nextKind||select.value;kind=normKind(raw);formMode=raw==='daily-form'||!!options.form;select.value=kind;
-  previousFocus=options.focus||document.activeElement;panel.classList.toggle('worker-guide-contextual',previousFocus!==startButton);index=0;storage(key('seen',kind),'1');panel.hidden=false;document.body.classList.add('worker-guide-active');render();
+  const raw=nextKind||'presenze';kind=normKind(raw);formMode=raw==='daily-form'||!!options.form;
+  previousFocus=options.focus||document.activeElement;index=0;storage(key('seen',kind),'1');panel.hidden=false;document.body.classList.add('worker-guide-active');render();
  }
  function autoStart(nextKind,options={}){
   if(!currentUser||!isActiveWorker||storage(key('automatic'))!=='1')return false;
@@ -88,14 +98,13 @@ if(worker&&startButton){
   start(nextKind,{...options,automatic:true});return true;
  }
  window.workerGuides={start,guideSteps};
- startButton.onclick=()=>start(select.value,{focus:startButton});
- select.onchange=()=>{kind=select.value;formMode=false;index=0;render();};
  back.onclick=()=>{if(index>0){index--;render();}};
- next.onclick=()=>{if(index<guideSteps(kind,formMode).length-1){index++;render();}};
+ next.onclick=()=>{if(kind==='colleague'){stop();document.getElementById('uploadColleagueButton')?.click();return;}if(index<guideSteps(kind,formMode).length-1){index++;render();}};
  close.onclick=stop;
  disable.onclick=()=>{storage(key('automatic'),'0');stop();};
  document.addEventListener('click',event=>{const b=event.target.closest?.('[data-guide-launch]');if(b){event.preventDefault();start(b.dataset.guideLaunch,{focus:b,form:b.dataset.guideLaunch==='daily-form'});}});
  document.getElementById('openPresenceDialog')?.addEventListener('click',()=>autoStart('presenze',{form:true}));
+ document.addEventListener('click',event=>{const b=event.target.closest?.('#uploadColleagueButton');if(b&&autoStart('colleague',{form:true})){event.preventDefault();event.stopImmediatePropagation();}},true);
  document.getElementById('uploadOther')?.addEventListener('click',event=>{if(autoStart('other',{form:true})){event.preventDefault();event.stopImmediatePropagation();}},{capture:true});
  worker.addEventListener('toggle',event=>{if(event.target?.id==='workerOtherPanel'&&event.target.open)autoStart('other',{form:true});},true);
  window.addEventListener('lavoro-facile:guide-request',event=>{const detail=event.detail||{};if(detail.automatic)autoStart(detail.kind||'daily-form',{form:true});});
