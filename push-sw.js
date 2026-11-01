@@ -2,11 +2,16 @@ importScripts('./push-notice-store.js?v=46');
 const fallbackNotice={title:'Lavoro Facile',body:'Hai un aggiornamento o un promemoria. Apri l’app per consultarlo.'};
 self.addEventListener('push',event=>{
  let data={};try{data=event.data?.json()||{};}catch{}
+ if(data.type==='daily-presence'&&/^\d{4}-\d{2}-\d{2}$/.test(data.day||'')){
+  const notice={presenceDay:data.day,mode:data.mode==='week'?'week':'day',noticeId:data.noticeId};event.waitUntil(Promise.all([self.registration.showNotification(String(data.title||'Le tue presenze').slice(0,100),{body:String(data.body||'Apri le tue presenze.').slice(0,300),icon:new URL('./icons/icon-192.png',self.registration.scope).href,badge:new URL('./icons/notification-badge.png?v=43',self.registration.scope).href,tag:'presence-'+data.day,silent:false,vibrate:[150,80,150],data:notice}),self.clients.matchAll({type:'window'}).then(clients=>clients.forEach(c=>c.postMessage({type:'DAILY_NOTICE_RECEIVED'})))]));return;
+ }
  const notice={title:typeof data.title==='string'?data.title.slice(0,100):fallbackNotice.title,eventKey:typeof data.eventKey==='string'?data.eventKey:null,body:typeof data.body==='string'?data.body.slice(0,600):fallbackNotice.body};
  event.waitUntil(Promise.all([self.clients.matchAll({type:'window'}).then(clients=>clients.forEach(c=>c.postMessage({type:'PUSH_NOTICE_RECEIVED'}))),self.registration.showNotification(notice.title,{body:notice.body,icon:new URL('./icons/icon-192.png',self.registration.scope).href,badge:new URL('./icons/notification-badge.png?v=43',self.registration.scope).href,tag:'lavoro-facile-'+String(data.id||'generic'),silent:false,vibrate:[150,80,150],renotify:true,data:notice})]));
 });
 self.addEventListener('notificationclick',event=>{
  event.notification.close();const target=self.registration.scope;
+ if(event.notification.data?.presenceDay){const notice=event.notification.data;event.waitUntil((async()=>{const existing=(await self.clients.matchAll({type:'window',includeUncontrolled:true})).find(c=>c.url.startsWith(target));if(existing){existing.postMessage({type:'OPEN_DAILY_PRESENCE',day:notice.presenceDay,mode:notice.mode,noticeId:notice.noticeId});return existing.focus();}const url=new URL(target);url.searchParams.set('presenze',notice.presenceDay);url.searchParams.set('vista',notice.mode==='week'?'week':'day');return self.clients.openWindow(url.href);})());return;}
+
  event.waitUntil((async()=>{
   const id=crypto.randomUUID(),notice={id,eventKey:event.notification.data?.eventKey,title:event.notification.title||fallbackNotice.title,body:event.notification.body||fallbackNotice.body};
   let saved=false;try{await LavoroPushNoticeStore.put(target,notice);saved=true;}catch{}
@@ -15,5 +20,6 @@ self.addEventListener('notificationclick',event=>{
   const url=new URL(target);url.searchParams.set('avviso',saved?id:'notifica');return self.clients.openWindow(url.href);
  })());
 });
+
 
 

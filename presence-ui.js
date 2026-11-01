@@ -32,16 +32,16 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
  async function task(fn){if(busy)return;busy=true;month.disabled=cdc.disabled=refreshButton.disabled=true;panel.setAttribute('aria-busy','true');try{if(!allowed())throw Error('Accedi come amministratore');await fn();}catch(e){status.textContent='Operazione non completata: '+e.message;}finally{busy=false;month.disabled=cdc.disabled=refreshButton.disabled=false;panel.removeAttribute('aria-busy');}}
  async function load(){
   const range=monthRange(month.value),id=getSession()?.user.id,token=++epoch;status.textContent='Caricamento anagrafica, orari e presenze verificate…';attendance.replaceChildren();budget.replaceChildren();
-  const [roster,registry,assignments,records,calendar,checks,legacyChecks,documents,marks]=await Promise.all([
+  const [roster,registry,assignments,records,calendar,checks,legacyChecks,documents,marks,declarations]=await Promise.all([
    api('attendance_roster'),all('hour_budget_registry',q=>q.order('person_key')),all('hour_budget_assignments',q=>q.order('person_key').order('valid_from')),
    all('hour_budget_days',q=>q.gte('day',range.start).lte('day',range.end).order('person_key').order('day')),all('hour_budget_calendar',q=>q.gte('day',range.start).lte('day',range.end).order('workplace').order('day')),
    all('presence_cdc_checks',q=>q.eq('month',month.value).order('site')),all('hour_budget_roster',q=>q.eq('month',month.value)),
-   all('documents',q=>q.eq('month',month.value).eq('category','presenze').order('id')),all('presence_week_marks',q=>q.eq('month',month.value).order('person_key').order('week_start'))
+   all('documents',q=>q.eq('month',month.value).eq('category','presenze').order('id')),all('presence_week_marks',q=>q.eq('month',month.value).order('person_key').order('week_start')),all('daily_presence',q=>q.gte('day',range.start).lte('day',range.end).order('worker_id').order('day'))
   ]);guard(id,token);const people=assembleRoster(roster.people,roster.accounts,registry),configs={};
   for(const p of people){const fromImport=roster.configs.find(c=>c.person_key===p.imported_key)?.data,own=registry.find(r=>r.person_key===p.person_key);configs[p.person_key]=fromImport?.schedules?.length?fromImport:{...fromImport,schedules:own?.schedules||[]};}
   // Preserve the earlier N153 confirmation until a CDC-specific confirmation is saved.
   if(!checks.some(c=>c.site==='N153')&&legacyChecks[0])checks.push({...legacyChecks[0],site:'N153',legacy:true});
-  state=indexState({people,accounts:roster.accounts,registry,assignments,records,calendar,checks,documents,marks,configs,month:month.value});
+  state=indexState({people,accounts:roster.accounts,registry,assignments,records,calendar,checks,documents,marks,configs,month:month.value});state.declarations=declarations;
   const weeks=periodWeeks(month.value);if(!weeks.some(w=>w.start===week)){const current=weekRange(today()).start;week=weeks.some(w=>w.start===current)?current:weeks[0].start;if(new Date(today()+'T12:00Z').getUTCDay()===1){const prev=weeks.find(w=>w.end<today()&&w.end>=new Date(Date.parse(today()+'T12:00Z')-7*86400000).toISOString().slice(0,10));if(prev)week=prev.start;}}
   render();status.textContent='Dati aggiornati · '+new Date().toLocaleTimeString('it-IT',{timeZone:'Europe/Rome'})+'. Le ore mancanti non sono zero ore lavorate.';
  }
@@ -61,7 +61,7 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
   for(const p of people){
    const row=el('tr'),name=el('th'),sites=[...new Set(monthRange(month.value).days.map(day=>assignment(state,p,day)?.workplace).filter(Boolean))];
    button(name,fullName(p),()=>personDialog(p),'pc-name');name.append(el('small',p.site==='N153'?(sites.join(' / ')||'Sede da assegnare'):'Sede unica'),el('small',p.account_id?'':'Senza account'));row.append(name);
-   for(const day of days){const c=cell(state,p,day,today()),td=el('td');if(w.monthDays.includes(day))td.className='pc-selected-week';const value=c.valid?'O '+hours(c.ordinary):c.status==='excluded'?'Escl.':c.status==='future'?'·':'—';const b=button(td,value,()=>dayDialog(p,day),'pc-day pc-'+c.status);b.setAttribute('aria-label',fullName(p)+' · '+day+' · '+({verified:'Verificato',missing:'Foglio mancante',received:'Foglio ricevuto, ore da controllare',stale:'Ore da riconfermare',future:'Giorno futuro',excluded:'Escluso'}[c.status]));if(c.valid&&c.justification)b.append(el('small',causeCode(c.justification)||c.justification));if(c.valid&&c.extra)b.append(el('small','S '+hours(c.extra)));row.append(td);}
+   for(const day of days){const c=cell(state,p,day,today()),td=el('td');if(w.monthDays.includes(day))td.className='pc-selected-week';const value=c.valid?'O '+hours(c.ordinary):c.status==='excluded'?'Escl.':c.status==='future'?'·':'—';const b=button(td,value,()=>dayDialog(p,day),'pc-day pc-'+c.status);b.setAttribute('aria-label',fullName(p)+' · '+day+' · '+({verified:'Verificato',missing:'Foglio mancante',received:'Foglio ricevuto, ore da controllare',stale:'Ore da riconfermare',future:'Giorno futuro',excluded:'Escluso'}[c.status]));if(c.valid&&c.justification)b.append(el('small',causeCode(c.justification)||c.justification));if(c.valid&&c.extra)b.append(el('small','S '+hours(c.extra)));const declared=state.declarations?.find(r=>r.worker_id===p.account_id&&r.day===day);if(declared&&(declared.supplementary_minutes||declared.cause))b.append(el('small','Dichiarato: '+[declared.supplementary_minutes?'S '+hours(declared.supplementary_minutes):'',declared.cause||''].filter(Boolean).join(' · ')));row.append(td);}
    const weekly=workerPeriod(state,p,w.monthDays,today()),monthly=workerPeriod(state,p,monthRange(month.value).days,today());
    for(const result of [weekly,monthly]){const td=el('td',hours(result.worked));td.append(el('small','O '+hours(result.ordinary)+' · S '+hours(result.extra)),el('small',result.complete?'Completo':'Parziale · '+result.missing+' giorni'));row.append(td);}
    const rowState=weekly.complete?'Presenze verificate':weekly.cells.some(c=>c.status==='stale')?'Da riconfermare':weekly.cells.some(c=>c.sheet)?'Foglio ricevuto · da controllare':'Foglio mancante';name.append(el('small',rowState));if(p.name_unconfirmed)name.append(el('small','Cognome da confermare: apri il nominativo')); 
@@ -112,6 +112,7 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
  }
  function dayDialog(p,day,draft=null){
   const c=cell(state,p,day,today()),ui=dialog(fullName(p)+' · '+labelDate(day));ui.content.append(el('p','Ore contrattuali previste: '+(c.expected===null?'da impostare':hours(c.expected)+' h')+'. Le presenze effettive vanno controllate sul foglio.'));
+  const declaration=state.declarations?.find(r=>r.worker_id===p.account_id&&r.day===day);if(declaration){const notice=el('div',null,'doc-note');notice.append(el('strong','Dichiarazione del lavoratore · da verificare'),el('p','S · Supplementare: '+hours(declaration.supplementary_minutes)+' h'+(declaration.cause?' · '+declaration.cause+' · '+(declaration.absence_scope==='full'?'Intera giornata':hours(declaration.absence_minutes)+' h'):' · Nessuna assenza indicata')));ui.content.append(notice);}
   if(c.sheet)button(ui.content,'Apri foglio originale',()=>openSheet(c.sheet,ui));else ui.content.append(el('p','Foglio non ricevuto: puoi usare un documento esterno indicando il riferimento.'));
   const useSource=select(ui.content,'Fonte',[['external','Foglio esterno / riferimento manuale'],...(c.sheet?[[c.sheet.id,'Ultimo foglio ricevuto']]:[])],c.sheet?.id||'external'),source=field(ui.content,'Riferimento / annotazione','text',c.record?.source_note||'');
   const box=el('div');ui.content.append(box);const rows=[];const locations=p.site==='N153'?N153_WORKPLACES:[p.site];
@@ -127,4 +128,5 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
  month.onchange=()=>{if(month.value)task(load);};cdc.onchange=()=>{if(state)render();};panel.addEventListener('toggle',()=>{if(panel.open&&!state&&allowed())task(load);});showTab('attendance');
  return {refresh(){const id=allowed()?getSession().user.id:null;panel.hidden=!id;if(owner!==id){owner=id;epoch++;state=null;attendance.replaceChildren();budget.replaceChildren();activeDialog?.close();panel.open=false;status.textContent='Apri la sezione per caricare i dati.';}}};
 }
+
 

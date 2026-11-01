@@ -1,5 +1,5 @@
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
-export function createNotificationCenter({getSession,onOpenTask=async()=>{}}){
+export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOpenPresence=async()=>{}}){
  const style=document.createElement('style');style.textContent=`
  .notification-bell{position:fixed;right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));z-index:1000;width:46px;height:46px;border:1px solid #c5dfd8;border-radius:50%;background:#fff;color:#087568;box-shadow:0 3px 16px #134f4720;display:grid;place-items:center;cursor:pointer}
  .notification-bell[hidden]{display:none}.notification-bell svg{width:25px;height:25px}.notification-badge{position:absolute;top:-4px;right:-5px;min-width:21px;height:21px;padding:0 4px;border-radius:20px;background:#ba3044;color:white;font-size:12px;font-weight:800;display:grid;place-items:center}.notification-badge[hidden]{display:none}
@@ -33,7 +33,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{}}){
  function count(value){unread=value;const total=value+(tasksData?.total||0);badge.textContent=total>99?'99+':String(total);badge.hidden=!total;bell.setAttribute('aria-label',isAdmin?'Apri notifiche, '+(tasksData?.total||0)+' attività da gestire e '+value+' avvisi da leggere':value?'Apri notifiche, '+value+' da leggere':'Apri notifiche, nessun avviso da leggere');}
  function render(){
   list.replaceChildren();for(const item of items){const article=document.createElement('article'),button=document.createElement('button'),title=document.createElement('strong'),date=document.createElement('small'),body=document.createElement('div');article.className='notification-item'+(item.read_at?'':' unread');button.type='button';title.textContent=item.title;date.textContent=new Date(item.created_at).toLocaleString('it-IT')+(item.read_at?' · Letto':' · Da leggere');body.className='notification-body';body.textContent=item.body;body.hidden=true;button.setAttribute('aria-expanded','false');button.append(title,date);article.append(button,body);list.append(article);
-   button.onclick=async()=>{body.hidden=!body.hidden;button.setAttribute('aria-expanded',String(!body.hidden));if(body.hidden||item.read_at)return;const currentUser=user;try{await api('read_notice',{id:item.id});if(user!==currentUser)return;item.read_at=new Date().toISOString();article.classList.remove('unread');date.textContent=new Date(item.created_at).toLocaleString('it-IT')+' · Letto';await load(false,false);}catch(error){result.textContent='Il messaggio è visibile, ma lo stato di lettura non è stato salvato. '+error.message;}};
+   button.onclick=async()=>{if(['daily_presence','presence_week'].includes(item.kind)){try{const parts=item.event_key.split(':');if(parts[0]!=='presence'||!/^\d{4}-\d{2}-\d{2}$/.test(parts[2]||''))throw Error('Collegamento presenze non valido');await api('read_notice',{id:item.id});dialog.close();await onOpenPresence(parts[2],item.kind==='presence_week'?'week':'day');await load(false,false);}catch(error){result.textContent=error.message;if(!dialog.open)dialog.showModal();}return;}body.hidden=!body.hidden;button.setAttribute('aria-expanded',String(!body.hidden));if(body.hidden||item.read_at)return;const currentUser=user;try{await api('read_notice',{id:item.id});if(user!==currentUser)return;item.read_at=new Date().toISOString();article.classList.remove('unread');date.textContent=new Date(item.created_at).toLocaleString('it-IT')+' · Letto';await load(false,false);}catch(error){result.textContent='Il messaggio è visibile, ma lo stato di lettura non è stato salvato. '+error.message;}};
   }
   if(!items.length)list.textContent=offset?'Non ci sono altri avvisi.':'Non hai ancora notifiche.';
   prev.hidden=!offset;next.hidden=items.length<30;readVisible.disabled=!items.some(item=>!item.read_at);
@@ -60,5 +60,6 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{}}){
  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='PUSH_NOTICE_RECEIVED')refreshIfVisible();});
  return {refresh,openSettings(){if(!getSession())return;if(!dialog.open)dialog.showModal();tab(true);},host:dialog.querySelector('.notification-settings-host'),setControls(value){controller=value;}};
 }
+
 
 
