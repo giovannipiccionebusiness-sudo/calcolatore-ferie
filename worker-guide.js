@@ -51,13 +51,23 @@ if(worker&&startButton){
   panel.hidden=true;unmark();document.body.classList.remove('worker-guide-active');
   if(previousFocus?.isConnected&&!worker.classList.contains('hidden'))previousFocus.focus({preventScroll:true});
  }
+ function mountPanel(target){
+  const dialog=target?.closest('dialog[open]');
+  if(dialog?.id==='presenceDialog'){const content=dialog.querySelector('.worker-menu-content');dialog.insertBefore(panel,content||null);return;}
+  if(dialog?.classList.contains('wc-dialog')){const head=dialog.querySelector('.wc-head');if(head)head.after(panel);else dialog.prepend(panel);return;}
+  const section=target?.closest('#workerArea details.worker-section,#workerPresencePanel,#dailyPresencePanel');
+  const container=section?.matches('details.worker-section')?section.querySelector('.worker-menu-content'):section;
+  if(container){container.prepend(panel);return;}
+  startButton.after(panel);
+ }
  function render(){
   const steps=guideSteps(kind,formMode),step=steps[index];if(!step)return;
   count.textContent='Passaggio '+(index+1)+' di '+steps.length;title.textContent=step.title;copy.textContent=step.text;back.disabled=index===0;next.disabled=index===steps.length-1;
   unmark();const target=findTarget(step.target);
-  if(target){revealWorkerTarget(target);target.classList.add('worker-guide-target');target.scrollIntoView({behavior:'smooth',block:'center'});}
-  const host=target?.closest('dialog[open]')||document.body;if(panel.parentElement!==host)host.append(panel);
-  panel.hidden=false;title.focus({preventScroll:true});
+  if(target)revealWorkerTarget(target);
+  mountPanel(target);panel.hidden=false;
+  if(target){target.classList.add('worker-guide-target');target.scrollIntoView({behavior:'smooth',block:'center'});}
+  title.focus({preventScroll:true});
  }
  function start(nextKind='presenze',options={}){
   const raw=nextKind||select.value;kind=normKind(raw);formMode=raw==='daily-form'||!!options.form;select.value=kind;
