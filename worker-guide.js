@@ -33,7 +33,7 @@ export function guideSteps(kind='presenze',form=false){
   {title:'Invialo dall’app',text:'Per trasmettere il foglio o una richiesta, torna al percorso di caricamento corrispondente.',target:'workerPresencePanel'}
  ];
  return [
-  {title:'Controlla il mese',text:'Il mese di riferimento è selezionato nella schermata principale, appena sopra il pulsante “Carica foglio presenze”. Se è errato, chiudi questa finestra e cambialo.',target:'presenceDialogTitle'},
+  {title:'Controlla il mese',text:'Scegli il mese di riferimento nella schermata principale, appena sopra il pulsante “Carica foglio presenze”. Se è errato, chiudi questa finestra e cambialo.',target:'month'},
   {title:'Scegli il venerdì',text:'Per il foglio settimanale o una sostituzione, seleziona il venerdì della settimana indicata.',target:'workerWeek'},
   {title:'Aggiorna il foglio',text:'Usa questo pulsante ogni settimana per inviare il foglio aggiornato.',target:'updateSheet'},
   {title:'Correggi un invio',text:'Se devi correggere un foglio già inviato per la stessa settimana, usa “Sostituisci”.',target:'replaceSheet'},
@@ -44,7 +44,7 @@ export function guideSteps(kind='presenze',form=false){
 }
 const worker=document.getElementById('workerArea');
 if(worker){
- let index=0,kind='presenze',formMode=false,previousFocus=null,currentUser='',isActiveWorker=false,welcome=null;
+ let index=0,kind='presenze',formMode=false,previousFocus=null,currentUser='',isActiveWorker=false,welcome=null,spotlightNodes=[],spotlightTarget=null,spotlightFrame=false,spotlightTimer=0;
  const make=(tag,text,cls)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;};
  const panel=make('section',null,'worker-guide-panel');panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','Guida interattiva');panel.setAttribute('aria-live','polite');
  const count=make('p',null,'worker-guide-count'),title=make('h3',null,'worker-guide-title'),copy=make('p',null,'worker-guide-copy'),controls=make('div',null,'worker-guide-controls');
@@ -54,30 +54,37 @@ if(worker){
  const key=(part,k='')=>'lavorofacile-guide:'+currentUser+':'+part+(k?':'+k:'');
  const normKind=value=>value==='daily-form'?'daily':value;
  const findTarget=ref=>ref?.startsWith('[')?document.querySelector(ref):document.getElementById(ref);
- function unmark(){document.querySelectorAll('.worker-guide-target').forEach(e=>e.classList.remove('worker-guide-target'));}
+ function clearSpotlight(){if(spotlightTimer){clearTimeout(spotlightTimer);spotlightTimer=0;}spotlightNodes.forEach(node=>node.remove());spotlightNodes=[];spotlightTarget=null;}
+ function unmark(){clearSpotlight();document.querySelectorAll('.worker-guide-target').forEach(e=>e.classList.remove('worker-guide-target'));}
+ function showSpotlight(target){
+  if(!target?.isConnected||panel.hidden)return;clearSpotlight();spotlightTarget=target;
+  const dialog=target.closest('dialog[open]'),root=dialog||document.body;
+  const bounds=dialog?dialog.getBoundingClientRect():{left:0,top:0,right:innerWidth,bottom:innerHeight};
+  const width=Math.max(0,bounds.right-bounds.left),height=Math.max(0,bounds.bottom-bounds.top),r=target.getBoundingClientRect(),gap=10;
+  const left=Math.max(bounds.left,Math.min(bounds.right,r.left-gap)),right=Math.max(left,Math.min(bounds.right,r.right+gap));
+  const top=Math.max(bounds.top,Math.min(bounds.bottom,r.top-gap)),bottom=Math.max(top,Math.min(bounds.bottom,r.bottom+gap));
+  const localX=v=>dialog?v-bounds.left:v,localY=v=>dialog?v-bounds.top:v;
+  const boxes=[[0,0,width,localY(top)],[localY(top),0,localX(left),Math.max(0,localY(bottom)-localY(top))],[localY(top),localX(right),Math.max(0,width-localX(right)),Math.max(0,localY(bottom)-localY(top))],[localY(bottom),0,width,Math.max(0,height-localY(bottom))]];
+  for(const [t,l,w,h] of boxes){if(w<=0||h<=0)continue;const shade=document.createElement('div');shade.className='worker-guide-shade';shade.setAttribute('aria-hidden','true');shade.style.cssText='position:'+(dialog?'absolute':'fixed')+';z-index:2147483000;top:'+t+'px;left:'+l+'px;width:'+w+'px;height:'+h+'px';root.append(shade);spotlightNodes.push(shade);}
+ }
+ function scheduleSpotlight(){if(!spotlightTarget||panel.hidden||spotlightFrame)return;spotlightFrame=true;requestAnimationFrame(()=>{spotlightFrame=false;if(spotlightTarget&&!panel.hidden)showSpotlight(spotlightTarget);});}
+ window.addEventListener('resize',scheduleSpotlight);document.addEventListener('scroll',scheduleSpotlight,true);
  function stop(){
   const host=panel.parentElement;if(host&&host!==document.body)document.body.append(panel);
   panel.hidden=true;unmark();document.body.classList.remove('worker-guide-active');
   if(previousFocus?.isConnected&&!worker.classList.contains('hidden'))previousFocus.focus({preventScroll:true});
  }
  function mountPanel(target){
-  if(target?.id==='uploadColleagueButton'){const row=target.closest('.colleague-upload-row');if(row){row.before(panel);return;}}
-  const dialog=target?.closest('dialog[open]');
-  if(dialog?.id==='presenceDialog'){const content=dialog.querySelector('.worker-menu-content');dialog.insertBefore(panel,content||null);return;}
-  if(dialog?.classList.contains('wc-dialog')){const head=dialog.querySelector('.wc-head');if(head)head.after(panel);else dialog.prepend(panel);return;}
-  const section=target?.closest('#workerArea details.worker-section,#workerPresencePanel,#dailyPresencePanel');
-  const container=section?.matches('details.worker-section')?section.querySelector('.worker-menu-content'):section;
-  if(container){container.prepend(panel);return;}
-  worker.prepend(panel);
+  const dialog=target?.closest('dialog[open]'),host=dialog||document.body;
+  if(panel.parentElement!==host)host.append(panel);
  }
  function keepTargetVisible(target){
-  if(!target){panel.scrollIntoView({behavior:'smooth',block:'nearest'});return;}
-  const scroller=target.closest('.worker-menu-content,.wc-body');
-  if(scroller&&scroller.contains(target)){
-   const tr=target.getBoundingClientRect(),sr=scroller.getBoundingClientRect();let offset=0;
-   if(tr.top<sr.top+12)offset=tr.top-(sr.top+16);else if(tr.bottom>sr.bottom-12)offset=tr.bottom-(sr.bottom-16);
+  if(!target)return;const scroller=target.closest('.worker-menu-content,.wc-body');
+  if(scroller?.contains(target)&&scroller.scrollHeight>scroller.clientHeight+4){
+   const tr=target.getBoundingClientRect(),sr=scroller.getBoundingClientRect(),guideTop=window.innerHeight-(panel.offsetHeight||220)-22,bottom=Math.min(sr.bottom-12,guideTop);let offset=0;
+   if(tr.top<sr.top+12)offset=tr.top-(sr.top+16);else if(tr.bottom>bottom-10)offset=tr.bottom-(bottom-10);
    if(offset)scroller.scrollBy({top:offset,behavior:'smooth'});
-  }else if(!target.closest('dialog[open]'))panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }else if(!target.closest('dialog[open]'))target.scrollIntoView({behavior:'smooth',block:'center'});
  }
  function render(){
   const steps=guideSteps(kind,formMode),step=steps[index];if(!step)return;
@@ -85,12 +92,12 @@ if(worker){
   unmark();const target=findTarget(step.target);
   if(target)revealWorkerTarget(target);
   mountPanel(target);panel.hidden=false;
-  if(target)target.classList.add('worker-guide-target');keepTargetVisible(target);
+  if(target)target.classList.add('worker-guide-target');keepTargetVisible(target);if(target){spotlightTimer=setTimeout(()=>{spotlightTimer=0;if(!panel.hidden&&target===findTarget(guideSteps(kind,formMode)[index]?.target))showSpotlight(target);},320);}
   title.focus({preventScroll:true});
  }
  function start(nextKind='presenze',options={}){
   const raw=nextKind||'presenze';kind=normKind(raw);formMode=raw==='daily-form'||!!options.form;
-  previousFocus=options.focus||document.activeElement;index=0;storage(key('seen',kind),'1');panel.hidden=false;document.body.classList.add('worker-guide-active');render();
+  previousFocus=options.focus||document.activeElement;index=Math.min(Math.max(0,Number(options.startAt)||0),guideSteps(kind,formMode).length-1);storage(key('seen',kind),'1');panel.hidden=false;document.body.classList.add('worker-guide-active');render();
  }
  function autoStart(nextKind,options={}){
   if(!currentUser||!isActiveWorker||storage(key('automatic'))!=='1')return false;
@@ -102,8 +109,8 @@ if(worker){
  next.onclick=()=>{if(kind==='colleague'){stop();document.getElementById('uploadColleagueButton')?.click();return;}if(index<guideSteps(kind,formMode).length-1){index++;render();}};
  close.onclick=stop;
  disable.onclick=()=>{storage(key('automatic'),'0');stop();};
- document.addEventListener('click',event=>{const b=event.target.closest?.('[data-guide-launch]');if(b){event.preventDefault();start(b.dataset.guideLaunch,{focus:b,form:b.dataset.guideLaunch==='daily-form'});}});
- document.getElementById('openPresenceDialog')?.addEventListener('click',()=>autoStart('presenze',{form:true}));
+ document.addEventListener('click',event=>{const b=event.target.closest?.('[data-guide-launch]');if(b){event.preventDefault();start(b.dataset.guideLaunch,{focus:b,form:b.dataset.guideLaunch==='daily-form',startAt:b.closest('#presenceDialog')?1:0});}});
+ document.getElementById('openPresenceDialog')?.addEventListener('click',()=>setTimeout(()=>autoStart('presenze',{form:true,startAt:1}),0));
  document.addEventListener('click',event=>{const b=event.target.closest?.('#uploadColleagueButton');if(b&&autoStart('colleague',{form:true})){event.preventDefault();event.stopImmediatePropagation();}},true);
  document.getElementById('uploadOther')?.addEventListener('click',event=>{if(autoStart('other',{form:true})){event.preventDefault();event.stopImmediatePropagation();}},{capture:true});
  worker.addEventListener('toggle',event=>{if(event.target?.id==='workerOtherPanel'&&event.target.open)autoStart('other',{form:true});},true);
