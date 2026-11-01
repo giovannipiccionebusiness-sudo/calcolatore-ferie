@@ -1,8 +1,8 @@
-import {createWeekChanges} from './week-changes.js?v=82';
+import {createWeekChanges} from './week-changes.js?v=83';
 import {createDailyPresence} from './daily-presence.js?v=82';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=83';
-import './app-version.js?v=83';
+import './app-version.js?v=84';
 import {createColleagueUpload} from './colleague-upload.js?v=66';
 import {createHourBudget} from './hour-budget-ui.js?v=83';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
