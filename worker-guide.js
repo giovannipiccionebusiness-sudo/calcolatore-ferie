@@ -1,14 +1,14 @@
 import {revealWorkerTarget} from './worker-menu.js?v=71';
 export function guideSteps(kind='presenze',form=false){
  if(kind==='daily')return form?[
-  {title:'Scegli cosa comunicare',text:'Per lo stesso giorno seleziona una sola voce: Supplementare oppure Assenza.',target:'[data-guide="daily-choice"]'},
-  {title:'Inserisci i dettagli',text:'Per le ore supplementari indica la durata. Per un’assenza scegli il giustificativo e indica se copre tutta la giornata o solo alcune ore.',target:'[data-guide="daily-card"]'},
-  {title:'Conferma i dati',text:'Controlla la giornata e spunta la conferma. Le tue dichiarazioni verranno verificate dal responsabile.',target:'[data-guide="daily-confirm"]'},
-  {title:'Salva la giornata',text:'Premi qui per salvare. La ritroverai nel riepilogo settimanale e nelle presenze della sede.',target:'[data-guide="daily-save"]'}
+  {title:'Scegli cosa comunicare',text:'Scegli una sola opzione: “Supplementare” per le ore in più oppure “Assenza” se non hai lavorato.',target:'[data-guide="daily-choice"]'},
+  {title:'Inserisci i dettagli',text:'Se hai scelto “Supplementare”, scrivi la durata (per esempio 1:30). Se hai scelto “Assenza”, scegli il motivo e la durata.',target:'[data-guide="daily-card"]'},
+  {title:'Conferma i dati',text:'Controlla giorno e dati inseriti. Per i giorni già trascorsi, spunta la casella di conferma.',target:'[data-guide="daily-confirm"]'},
+  {title:'Salva la giornata',text:'Premi “Salva giornata”. Il responsabile controllerà le informazioni inserite.',target:'[data-guide="daily-save"]'}
  ]:[
-  {title:'Scegli il giorno',text:'Seleziona la giornata da aggiornare. La notifica del responsabile apre direttamente il giorno corretto.',target:'dpDay'},
-  {title:'Apri l’inserimento',text:'Premi “Inserisci variazioni” per indicare ore supplementari oppure un’assenza.',target:'dpCompile'},
-  {title:'Riepilogo settimanale',text:'Da qui puoi controllare e confermare le giornate già trascorse della settimana.',target:'[data-guide="daily-summary"]'}
+  {title:'Scegli il giorno',text:'Scegli la data da compilare. Se sei entrato da una notifica, la data è già impostata.',target:'dpDay'},
+  {title:'Apri l’inserimento',text:'Premi “Inserisci variazioni”. Seleziona poi “Supplementare” oppure “Assenza”: puoi indicarne una sola per giornata.',target:'dpCompile'},
+  {title:'Riepilogo settimanale',text:'Apri il riepilogo per controllare le giornate già inserite e confermare quelle passate.',target:'[data-guide="daily-summary"]'}
  ];
  if(kind==='other')return [
   {title:'Scegli il documento',text:'Seleziona il modulo che vuoi inviare. Per il congedo parentale puoi aggiungere più pagine in un unico PDF.',target:'docType'},
@@ -35,7 +35,7 @@ const worker=document.getElementById('workerArea'),startButton=document.getEleme
 if(worker&&startButton){
  let index=0,kind='presenze',formMode=false,previousFocus=null,currentUser='',isActiveWorker=false,welcome=null;
  const make=(tag,text,cls)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;};
- const panel=make('section',null,'worker-guide-panel');panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Guida interattiva');panel.setAttribute('aria-live','polite');
+ const panel=make('section',null,'worker-guide-panel');panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','Guida interattiva');panel.setAttribute('aria-live','polite');
  const label=make('label','Percorso'),select=make('select',null,'doc-select');select.id='workerGuideKind';label.htmlFor=select.id;
  for(const [value,text]of [['presenze','Foglio presenze'],['daily','Ore in più e assenze'],['other','Altri documenti'],['modules','Moduli da scaricare']]){const o=make('option',text);o.value=value;select.append(o);}
  const count=make('p',null,'worker-guide-count'),title=make('h3',null,'worker-guide-title'),copy=make('p',null,'worker-guide-copy'),controls=make('div',null,'worker-guide-controls');
@@ -66,7 +66,7 @@ if(worker&&startButton){
   unmark();const target=findTarget(step.target);
   if(target)revealWorkerTarget(target);
   mountPanel(target);panel.hidden=false;
-  if(target){target.classList.add('worker-guide-target');target.scrollIntoView({behavior:'smooth',block:'center'});}
+  if(target)target.classList.add('worker-guide-target');panel.scrollIntoView({behavior:'smooth',block:'nearest'});
   title.focus({preventScroll:true});
  }
  function start(nextKind='presenze',options={}){
