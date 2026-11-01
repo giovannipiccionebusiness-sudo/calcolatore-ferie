@@ -9,4 +9,4 @@
 
 .wc-dialog{box-sizing:border-box;width:min(560px,calc(100vw - 32px));height:min(76dvh,720px);max-height:76dvh;overflow:hidden;grid-template-rows:auto minmax(0,1fr) auto;margin:auto}.wc-dialog[open]{display:grid}.wc-head{position:relative;top:auto}.wc-body{min-height:0;overflow-y:auto;overscroll-behavior:contain}.wc-footer{position:relative;bottom:auto}
 
-.wc-guide-button{margin-left:auto;flex:0 0 36px;width:36px;height:36px;font-size:18px}.wc-head{display:flex;align-items:center;gap:8px}.wc-head .wc-eyebrow{flex:1}
+.wc-guide-button{margin-left:auto;flex:0 0 36px;width:36px;height:36px;font-size:18px}.wc-head{display:grid;grid-template-columns:minmax(0,1fr) 40px;grid-template-areas:"eyebrow close" "title title";align-items:center;gap:4px 8px;padding:16px 18px 14px}.wc-head .wc-eyebrow{grid-area:eyebrow;flex:none;min-width:0;line-height:1.25;letter-spacing:.7px}.wc-head h2{grid-area:title;min-width:0;width:100%;margin:2px 0 0!important;font-size:clamp(21px,5.5vw,25px);line-height:1.2;overflow-wrap:normal}.wc-head .wc-close{grid-area:close;float:none;justify-self:end;margin:0}
