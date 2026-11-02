@@ -2,16 +2,16 @@ import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 const OWNER='lavoro-facile-production-push-owner';
 export function createPushControls({getSession,mount=null,getProfile=()=>null,openSettings=()=>{}}){
  const panel=document.createElement('section');panel.className='push-settings';panel.innerHTML='<h3>🔔 Vuoi un promemoria per le presenze?</h3><p class="push-intro">Ti avvisiamo quando manca il foglio e quando il tuo account viene abilitato. I dati dei documenti restano dentro l’app.</p><p class="push-status" role="status"></p><div class="doc-toolbar"><button type="button" class="doc-button">Sì, attiva gli avvisi</button><button type="button" class="doc-button outline">Non ora</button><button type="button" class="doc-button outline">Verifica ricezione sul mio telefono</button><button type="button" class="doc-button outline">Disattiva notifiche</button></div><details class="push-help"><summary>Mostrami come fare</summary><div class="push-help-content"></div></details>';
- (mount||document.getElementById('loggedArea')).append(panel);const status=panel.querySelector('[role=status]'),heading=panel.querySelector('h3'),intro=panel.querySelector('.push-intro'),[enable,later,test,disable]=panel.querySelectorAll('button'),help=panel.querySelector('.push-help'),helpContent=panel.querySelector('.push-help-content');let busy=false,settingsOpen=false;
+ (mount||document.getElementById('loggedArea')).append(panel);const status=panel.querySelector('[role=status]'),heading=panel.querySelector('h3'),intro=panel.querySelector('.push-intro'),[enable,later,test,disable]=panel.querySelectorAll('button'),help=panel.querySelector('.push-help'),helpContent=panel.querySelector('.push-help-content');let busy=false,settingsOpen=false,repairRequired=false;
  const manage=document.createElement('button');manage.type='button';manage.className='push-manage';manage.textContent='Gestisci avvisi';manage.hidden=true;manage.setAttribute('aria-expanded','false');panel.id='pushNotificationSettings';manage.setAttribute('aria-controls',panel.id);panel.after(manage);
  manage.onclick=()=>{settingsOpen=!settingsOpen;refresh();};
  const reminder=document.createElement('aside');reminder.className='push-activation-reminder';reminder.hidden=true;reminder.setAttribute('aria-label','Attivazione notifiche');
- reminder.innerHTML='<span class="push-reminder-icon" aria-hidden="true">🔔</span><div><strong>Attiva le notifiche sul telefono</strong><p>Ricevi i messaggi del responsabile e i promemoria delle presenze.</p><button type="button">Attiva notifiche</button></div>';
+ reminder.innerHTML='<span class="push-reminder-icon" aria-hidden="true">🔔</span><div><strong>Non dimenticare ore e assenze</strong><p>Attiva le notifiche per ricordarti di inserire ore e assenze.</p><button type="button">Attiva notifiche</button></div>';
  const reminderStyle=document.createElement('style');reminderStyle.textContent='.push-activation-reminder{display:flex;gap:12px;margin:12px 0 18px;padding:16px;border:1px solid #c8dfd2;border-radius:18px;background:#f4fbec;color:#254b39}.push-activation-reminder[hidden]{display:none!important}.push-reminder-icon{font-size:24px;flex-shrink:0}.push-activation-reminder strong{display:block;font-size:1rem;line-height:1.3}.push-activation-reminder p{margin:6px 0 12px;font-size:.88rem;line-height:1.5}.push-activation-reminder button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:11px 16px;min-height:44px;background:#087d6e;color:#fff;cursor:pointer}';document.head.append(reminderStyle);
- const reminderAnchor=document.getElementById('docsApp')||document.getElementById('workerArea')||document.getElementById('loggedArea');reminderAnchor.before(reminder);
+ const reminderAnchor=document.getElementById('workerArea');if(reminderAnchor)reminderAnchor.prepend(reminder);else document.getElementById('loggedArea').before(reminder);
  reminder.querySelector('button').onclick=()=>{openSettings();};
- function remind(active=false,message='Ricevi i messaggi del responsabile e i promemoria delle presenze.'){
-  reminder.hidden=!getSession()||getProfile()?.role!=='worker'||active;
+ function remind(active=false,message='Attiva le notifiche per ricordarti di inserire ore e assenze.'){
+  reminder.hidden=!getSession()||getProfile()?.role!=='worker'||!getProfile()?.active||active;
   reminder.querySelector('p').textContent=message;
  }
  const recheck=()=>{if(document.visibilityState==='visible'&&getSession())refresh();};
@@ -43,6 +43,7 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  }
  let refreshId=0;
  async function api(action,endpoint,extra={}){const session=getSession();if(!session)throw Error('Accedi per gestire le notifiche.');const response=await fetch(SUPABASE_URL+'/functions/v1/app-web-push',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token},body:JSON.stringify({action,endpoint,...extra}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw Error(data.error||'Servizio notifiche non disponibile.');return data;}
+ async function deviceStatus(endpoint){const session=getSession();const response=await fetch(SUPABASE_URL+'/functions/v1/notification-report',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'device-status',endpoint}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw Error(data.error||'Controllo dispositivo non disponibile.');return data;}
  async function registration(){return Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Error('Aggiornamento dell’app in corso. Chiudi e riapri, poi riprova.')),12000))]);}
  function owner(){try{return localStorage.getItem(OWNER);}catch{return null;}}
  function testPassed(){try{return localStorage.getItem(OWNER+'-checked-'+getSession()?.user.id)==='1';}catch{return false;}}
@@ -51,7 +52,7 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  async function current(){if(!supported())return null;return (await registration()).pushManager.getSubscription();}
  async function refresh(){
   if(busy)return;
-  const user=getSession()?.user.id,version=++refreshId;remind(false);
+  const user=getSession()?.user.id,version=++refreshId;repairRequired=false;remind(false);
   panel.hidden=!user;manage.hidden=true;if(panel.hidden){settingsOpen=false;return;}
   enable.hidden=later.hidden=test.hidden=disable.hidden=true;help.hidden=true;const administrator=getProfile()?.active&&getProfile()?.role==='admin';heading.textContent=administrator?'🔔 Vuoi ricevere gli avvisi da gestire?':'🔔 Vuoi un promemoria per le presenze?';intro.textContent=administrator?'Ricevi avvisi per gli account da abilitare, i documenti da verificare e le richieste da autorizzare.':'Ti avvisiamo quando manca il foglio e quando il tuo account viene abilitato. I dati dei documenti restano dentro l’app.';intro.hidden=false;
   if(ios()&&!standalone()){status.textContent=postponed()?'Va bene, puoi continuare a usare l’app e attivare gli avvisi quando vuoi.':'Bastano tre passaggi per preparare il tuo iPhone.';intro.hidden=postponed();enable.hidden=false;later.hidden=postponed();enable.textContent='Mostrami i passaggi';guide(true);help.hidden=false;remind(false,'Su iPhone aggiungi prima l’app alla schermata Home, poi attiva gli avvisi. Ti mostriamo i passaggi.');return;}
@@ -64,12 +65,13 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
     if(keys?.p256dh&&keys?.auth){
      await api('subscribe',sub.endpoint,{keys,scope:'production'});
      if(version!==refreshId||getSession()?.user.id!==user)return;
-     active=true;
+     const health=await deviceStatus(sub.endpoint);if(version!==refreshId||getSession()?.user.id!==user)return;repairRequired=health.repair===true;active=!repairRequired;
     }
    }
    const blocked=Notification.permission==='denied';
-   remind(active,blocked?'Gli avvisi sono bloccati su questo telefono. Apri le istruzioni per consentirli.':'Ricevi i messaggi del responsabile e i promemoria delle presenze.');
-   enable.hidden=active;later.hidden=active||postponed();disable.hidden=!active;test.hidden=!active||testPassed();enable.disabled=false;enable.textContent=blocked?'Mostrami come attivarli':postponed()?'Attiva gli avvisi':'Sì, attiva gli avvisi';help.hidden=active||!blocked;if(blocked)guide();if(active){heading.textContent='🔔 Gli avvisi sono attivi';intro.hidden=true;help.open=false;}else if(postponed()){heading.textContent='🔔 Avvisi sul telefono';intro.hidden=true;}manage.hidden=!!mount||!(active&&testPassed());manage.textContent=settingsOpen?'Chiudi impostazioni avvisi':'Gestisci avvisi';manage.setAttribute('aria-expanded',String(settingsOpen));panel.hidden=!mount&&active&&testPassed()&&!settingsOpen;status.textContent=active?(administrator?'Riceverai gli avvisi per le attività da gestire, anche con l’app chiusa.':'Ti ricordiamo le presenze mancanti il venerdì alle 17:00 e a fine mese alle 18:00.'):postponed()?'Va bene, puoi continuare a usare l’app e attivare gli avvisi quando vuoi.':blocked?'Gli avvisi sono bloccati sul telefono. Ti accompagniamo passo passo per riattivarli.':'Premi “Sì, attiva gli avvisi”, poi scegli “Consenti” nella richiesta del telefono.';
+   remind(active,blocked?'Gli avvisi sono bloccati su questo telefono. Apri le istruzioni per consentirli.':'Attiva le notifiche per ricordarti di inserire ore e assenze.');
+   enable.hidden=active;later.hidden=active||postponed();disable.hidden=!active;test.hidden=!active||testPassed();enable.disabled=false;enable.textContent=blocked?'Mostrami come attivarli':postponed()?'Attiva gli avvisi':'Sì, attiva gli avvisi';help.hidden=active||!blocked;if(blocked)guide();if(active){heading.textContent='🔔 Gli avvisi sono attivi';intro.hidden=true;help.open=false;}else if(postponed()){heading.textContent='🔔 Avvisi sul telefono';intro.hidden=true;}manage.hidden=!!mount||!(active&&testPassed());manage.textContent=settingsOpen?'Chiudi impostazioni avvisi':'Gestisci avvisi';manage.setAttribute('aria-expanded',String(settingsOpen));panel.hidden=!mount&&active&&testPassed()&&!settingsOpen;status.textContent=active?(administrator?'Riceverai gli avvisi per le attività da gestire, anche con l’app chiusa.':'Ricevi i promemoria giornalieri mezz’ora prima della fine del turno, se la giornata non è compilata, e il riepilogo del venerdì.'):postponed()?'Va bene, puoi continuare a usare l’app e attivare gli avvisi quando vuoi.':blocked?'Gli avvisi sono bloccati sul telefono. Ti accompagniamo passo passo per riattivarli.':'Premi “Sì, attiva gli avvisi”, poi scegli “Consenti” nella richiesta del telefono.';
+   if(repairRequired){heading.textContent='🔔 Ripristina gli avvisi';status.textContent='L’ultimo promemoria non è stato accettato per questo telefono. Premi Ripristina avvisi, poi verifica la ricezione.';enable.textContent='Ripristina avvisi';remind(false,'Gli avvisi di questo telefono richiedono attenzione. Premi il pulsante per ripristinarli.');reminder.querySelector('button').textContent='Ripristina avvisi';}else reminder.querySelector('button').textContent='Attiva notifiche';
   }catch(e){if(version!==refreshId||getSession()?.user.id!==user)return;status.textContent=e.message;enable.hidden=false;remind(false,'Non è stato possibile confermare l’attivazione. Apri le impostazioni e riprova.');}
  }
  async function run(task){if(busy)return;busy=true;for(const b of [enable,later,test,disable])b.disabled=true;try{await task();}catch(e){status.textContent=e.message;}finally{busy=false;for(const b of [enable,later,test,disable])b.disabled=false;}}
@@ -81,16 +83,17 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
   const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();if(permission!=='granted'){if(permission==='denied'){guide();help.hidden=false;help.open=true;enable.textContent='Mostrami come attivarli';status.textContent='Gli avvisi sono bloccati. Segui i passaggi qui sotto per riattivarli.';}else{status.textContent='Nessun problema: puoi usare l’app e attivare gli avvisi più avanti. Quando riprovi, scegli “Consenti” nella richiesta del telefono.';}return;}
   postpone(false);
   status.textContent='Attivazione in corso…';const {publicKey}=await api('key'),reg=await registration();let sub=await reg.pushManager.getSubscription();
-  if(sub&&owner()!==user){await sub.unsubscribe();sub=null;}
+  if(sub&&(owner()!==user||repairRequired)){await sub.unsubscribe();sub=null;}
   const fresh=!sub;if(fresh)markTest(false);if(!sub){const padded=publicKey.replaceAll('-','+').replaceAll('_','/');const key=Uint8Array.from(atob(padded+'='.repeat((4-padded.length%4)%4)),c=>c.charCodeAt(0));sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});}
   try{if(getSession()?.user.id!==user)throw Error('Account cambiato. Riprova.');await api('subscribe',sub.endpoint,{keys:sub.toJSON?.().keys,scope:'production'});setOwner(user);}catch(e){if(fresh)await sub.unsubscribe();throw e;}
-  busy=false;await refresh();busy=true;status.textContent='Notifiche attivate. Premi “Invia notifica di prova” per controllare la ricezione.';
+  busy=false;await refresh();busy=true;status.textContent='Notifiche attivate. Premi “Verifica ricezione sul mio telefono” per controllare la ricezione.';
  });};
  test.onclick=()=>run(async()=>{const sub=await current();if(!sub)throw Error('Attiva prima le notifiche.');await api('test',sub.endpoint);markTest(true);test.hidden=true;settingsOpen=false;panel.hidden=!mount;manage.hidden=!!mount;manage.textContent='Gestisci avvisi';manage.setAttribute('aria-expanded','false');status.textContent='Prova inviata al tuo telefono. Controlla le notifiche: gli avvisi restano attivi e i promemoria arriveranno automaticamente.';});
  async function deactivate(){if(!supported())return;const registrationNow=await navigator.serviceWorker.getRegistration('./');if(!registrationNow)return;const sub=await registrationNow.pushManager.getSubscription();let error=null;if(sub){await sub.unsubscribe();try{if(getSession()&&owner()===getSession().user.id)await api('unsubscribe',sub.endpoint);}catch(e){error=e;}}markTest(false);setOwner(null);const reg=await registration();for(const n of await reg.getNotifications())n.close();if(error)throw Error('Notifiche disattivate sul telefono. La pulizia sul server sarà completata automaticamente.');}
  disable.onclick=()=>run(async()=>{await deactivate();busy=false;await refresh();busy=true;status.textContent='Notifiche disattivate su questo dispositivo.';});
  return {refresh,showSettings:()=>{settingsOpen=true;return refresh();},beforeLogout:async()=>{try{await Promise.race([deactivate(),new Promise(r=>setTimeout(r,2000))]);}catch{/* Logout must still complete; invalid endpoints expire on the push service. */}}};
 }
+
 
 
 

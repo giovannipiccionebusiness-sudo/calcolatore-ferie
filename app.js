@@ -1,9 +1,10 @@
+import {createNotificationReport} from './notification-report.js?v=98';
 import {createSupervisor} from './supervisor.js?v=97';
 import {createWeekChanges} from './week-changes.js?v=85';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=83';
-import './app-version.js?v=97';
+import './app-version.js?v=98';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=83';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -13,7 +14,7 @@ import {createAccountMenu} from './account-menu.js?v=50';
 import {createNotificationCenter} from './notification-center.js?v=82';
 import {setupOpenedPushNotice} from './push-open-notice.js?v=48';
 import {createAdminMessages} from './admin-messages.js?v=48';
-import {createPushControls} from './push-notifications.js?v=53';
+import {createPushControls} from './push-notifications.js?v=98';
 import {openDocumentCamera} from './live-camera.js?v=60';
 import {refreshAdminMenu} from './admin-menu.js?v=35';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
@@ -87,7 +88,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){accountMenu.refresh(on);if(!on)supervisor.clear();queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
+function showLogged(on){accountMenu.refresh(on);if(!on){supervisor.clear();notificationReport.clear();}queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
 const passwordRecovery=setupPasswordRecovery({getClient:()=>authClient,onComplete:async()=>{session=null;profile=null;await reloadAccount();},notice:appNotice});
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -534,11 +535,12 @@ const pushControls=createPushControls({getSession:()=>session,mount:notification
 notificationCenter.setControls(pushControls);
 const weekChanges=createWeekChanges({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile,onSaved:async mode=>{msg(mode==='day'?'Giornata salvata. La ritrovi nel riepilogo settimanale.':'Settimana confermata.');await dailyPresence.invalidate();await refreshWorker();}});
 const dailyPresence=createDailyPresence({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile,weekChanges,onError:err,onNoticeRefresh:()=>notificationCenter.refresh(true)});
+const notificationReport=createNotificationReport({getSession:()=>session,getProfile:()=>profile});
 const adminShifts=createAdminShifts({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const refreshWorkerBeforePresence=refreshWorker;
 refreshWorker=async function(){await refreshWorkerBeforePresence();if(profile?.active&&profile.role==='worker')await dailyPresence.refresh();};
 const refreshAdminBeforePresence=refreshAdmin;
-refreshAdmin=async function(){await refreshAdminBeforePresence();if(adminAllowed()){await weekChanges.refreshAdmin({mount:$('adminOperations'),documents:docs,people,month:$('adminMonth').value,site:$('adminSite').value});await adminShifts.refresh({mount:$('adminOperations'),people,site:$('adminSite').value});}};
+refreshAdmin=async function(){await refreshAdminBeforePresence();if(adminAllowed()){await weekChanges.refreshAdmin({mount:$('adminOperations'),documents:docs,people,month:$('adminMonth').value,site:$('adminSite').value});await adminShifts.refresh({mount:$('adminOperations'),people,site:$('adminSite').value});await notificationReport.refresh({mount:$('adminOperations'),site:$('adminSite').value});}};
 const appReady=boot().catch(err);
 
 
@@ -572,6 +574,7 @@ async function openAdminNotificationTask(task){
  for(let parent=row.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
  row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
 }
+
 
 
 
