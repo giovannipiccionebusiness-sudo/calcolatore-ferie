@@ -1,4 +1,4 @@
-import {prepareDeclaration} from './presence-acquire-core.js?v=83';
+import {prepareDeclaration} from './presence-acquire-core.js?v=99';
 import {causeCode,CAUSES,splitWorked,decimalMinutes} from './attendance-reader-core.js?v=75';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 import {N153_WORKPLACES} from './workplaces.js?v=61';
@@ -125,12 +125,12 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
   const absence=field(ui.content,'Ore di assenza (separate dalle lavorate)','text',hours(c.record?.absence_minutes||0)),cause=select(ui.content,'Causale',[...Object.entries(CAUSES).map(([k,v])=>[k,k?k+' · '+v:v]),...['Assenza giustificata','Altro giustificativo'].map(x=>[x,x]),...(c.record?.justification&&!causeCode(c.record.justification)?[[c.record.justification,c.record.justification]]:[])],causeCode(c.record?.justification)||c.record?.justification||''),checked=field(ui.content,'Ho verificato tutte le ore del giorno, compresi riposi e assenze','checkbox');
   if(acquire&&declaration){
    if(p.site==='N153'&&!c.assignment?.workplace&&!c.record?.allocations?.length)for(const row of rows){row.loc.prepend(new Option('Seleziona la sede',''));row.loc.value='';}
-   const prepared=prepareDeclaration(declaration,rows.map(r=>({workplace:r.loc.value,ordinary:decimalMinutes(r.ord.value),overtime:decimalMinutes(r.extra.value)})),c.expected);
-   rows.forEach((r,i)=>r.extra.value=hours(prepared.allocations[i].overtime));cause.value=prepared.cause;absence.value=prepared.absence_minutes===null?'':hours(prepared.absence_minutes);
-   ui.message.textContent=prepared.needsSplit?'Ripartisci il supplementare dichiarato ('+hours(declaration.supplementary_minutes)+' h) tra le sedi prima di confermare.':prepared.absence_minutes===null?'Indica le ore di assenza della giornata intera: il contratto non è impostato.':'Controlla anche le ore ordinarie e spunta la verifica prima di acquisire.';
+   const prepared=prepareDeclaration(declaration,rows.map(r=>({workplace:r.loc.value,ordinary:decimalMinutes(r.ord.value),overtime:decimalMinutes(r.extra.value)})),c.expected,{hasRecord:!!c.record});
+   rows.forEach((r,i)=>{r.ord.value=hours(prepared.allocations[i].ordinary);r.extra.value=hours(prepared.allocations[i].overtime);});if(!c.record&&c.expected===null)for(const r of rows)r.ord.value='';cause.value=prepared.cause;absence.value=prepared.absence_minutes===null?'':hours(prepared.absence_minutes);
+   ui.message.textContent=prepared.needsSplit?'Ripartisci il supplementare dichiarato ('+hours(declaration.supplementary_minutes)+' h) tra le sedi prima di confermare.':prepared.absence_minutes===null?'Indica le ore di assenza della giornata intera: il contratto non è impostato.':(!c.record&&c.expected===null?'Contratto non impostato: inserisci le ore ordinarie effettive prima di confermare.':!c.record?'Ordinarie proposte dal contratto, al netto delle assenze. Controlla le ore effettive e spunta la verifica prima di acquisire.':'Le ore ordinarie già salvate restano invariate. Controlla e spunta la verifica prima di acquisire.');
    button(ui.content,'Torna alla modifica manuale',()=>{ui.d.close();dayDialog(p,day);});
    dialogAction(ui,'Conferma acquisizione',async()=>{
-    if(!checked.checked)throw Error('Conferma la verifica di tutte le ore, assenze e sedi');if(cause.value!==declaration.cause)throw Error('Per correggere la causale usa il salvataggio manuale');
+    if(!checked.checked)throw Error('Conferma la verifica di tutte le ore, assenze e sedi');if(rows.some(r=>!r.ord.value.trim()))throw Error('Indica le ore ordinarie effettive, anche se zero');if(cause.value!==declaration.cause)throw Error('Per correggere la causale usa il salvataggio manuale');
     const allocations=rows.map(r=>({workplace:r.loc.value,ordinary:decimalMinutes(r.ord.value),overtime:decimalMinutes(r.extra.value)}));if(allocations.some(r=>!r.workplace))throw Error('Seleziona la sede lavorata prima di acquisire');if(allocations.reduce((n,r)=>n+r.overtime,0)!==declaration.supplementary_minutes)throw Error('La somma del supplementare per sede deve essere '+hours(declaration.supplementary_minutes)+' h');
     if(declaration.absence_scope==='full'&&allocations.some(r=>r.ordinary>0))throw Error('Per una giornata intera di assenza, correggi prima le ore ordinarie con il salvataggio manuale');if(!absence.value.trim())throw Error('Verifica e indica le ore di assenza');await ensureRegistry(p);const {data,error}=await getClient().rpc('acquire_presence_declaration',{p_person_key:p.person_key,p_day:day,p_worker:p.account_id,p_declaration_version:declaration.version,p_record_version:c.record?.version??null,p_allocations:allocations,p_absence_minutes:decimalMinutes(absence.value),p_document:useSource.value==='external'?null:useSource.value,p_source_note:source.value.trim(),p_verified:true});
     if(error)throw Error(error.message);const record=Array.isArray(data)?data[0]:data;if(!record?.person_key)throw Error('Ricarica le presenze per verificare il salvataggio');document.dispatchEvent(new CustomEvent('presence-record-saved',{detail:{record}}));ui.d.close();await load();status.textContent='Dichiarazione acquisita: presenze verificate e totali per sede aggiornati.';
@@ -142,6 +142,7 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
  month.onchange=()=>{if(month.value)task(load);};cdc.onchange=()=>{if(state)render();};panel.addEventListener('toggle',()=>{if(panel.open&&!state&&allowed())task(load);});showTab('attendance');
  return {refresh(){const id=allowed()?getSession().user.id:null;panel.hidden=!id;if(owner!==id){owner=id;epoch++;state=null;attendance.replaceChildren();budget.replaceChildren();activeDialog?.close();panel.open=false;status.textContent='Apri la sezione per caricare i dati.';}}};
 }
+
 
 
 
