@@ -32,3 +32,6 @@ main:has(#presenceConsole[open]){max-width:1500px}
 .pc-dialog summary{cursor:pointer;font-weight:700;padding:8px}
 .pc-editor-row{border:1px solid #d7e7df;border-radius:14px;padding:14px;margin:14px 0;background:#f5faf7}
 @media(max-width:760px){.presence-console{padding:16px}.pc-table th:first-child{min-width:150px;max-width:180px}.pc-table th,.pc-table td{min-width:90px;padding:8px 6px}.pc-filters{gap:5px}.pc-tabs button{font-size:14px;padding:12px 8px}.pc-table-scroll{max-height:68dvh}}
+
+
+.pc-day.pc-declared{background:#fff2cf;border:1px solid #d6b76e;color:#6b4d10}.pc-day.pc-draft-incomplete{background:#fff0e4;border:1px solid #dda875;color:#7d491b}
