@@ -1,8 +1,9 @@
+import {createSupervisor} from './supervisor.js?v=97';
 import {createWeekChanges} from './week-changes.js?v=85';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=83';
-import './app-version.js?v=96';
+import './app-version.js?v=97';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=83';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -86,7 +87,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){accountMenu.refresh(on);queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
+function showLogged(on){accountMenu.refresh(on);if(!on)supervisor.clear();queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
 const passwordRecovery=setupPasswordRecovery({getClient:()=>authClient,onComplete:async()=>{session=null;profile=null;await reloadAccount();},notice:appNotice});
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -406,7 +407,7 @@ refreshAdmin=async function(){
  if(!deliveries.childNodes.length)deliveries.textContent='Nessun lavoratore attivo nella sede selezionata.';
  const {data,error}=await sb.from('audit_log').select('*').order('created_at',{ascending:false}).limit(100);
  const log=$('auditList');log.replaceChildren();if(error){log.textContent='Impossibile aggiornare lo storico.';return}
- const labels={upload:'Documento caricato',review:'Documento verificato / richiesta aggiornata',profile_update:'Profilo aggiornato'};
+ const labels={supervisor_authorization:'Autorizzazione caposervizio',upload:'Documento caricato',review:'Documento verificato / richiesta aggiornata',profile_update:'Profilo aggiornato'};
  for(const a of data||[]){const row=node('div',null,'doc-row'),actor=people.find(p=>p.id===a.actor_id);const text=node('div'),d=docs.find(d=>d.id===a.target_id),worker=d?people.find(p=>p.id===d.worker_id):null;
  text.append(node('strong',labels[a.action]||a.action),node('small',dateLabel(a.created_at)+' · '+(actor?.full_name||'Configurazione')));
  if(d)text.append(node('small',(worker?.full_name||d?.recipient_name||'Lavoratore')+' · '+(typeLabel[d.category]||'Documento')));
@@ -526,6 +527,7 @@ const colleagueUpload=createColleagueUpload({getSession:()=>session,getProfile:(
 const presenceConsole=createPresenceConsole({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const hourBudget=createHourBudget({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const leaveCalculator=createLeaveCalculator({getSession:()=>session,getProfile:()=>profile});
+const supervisor=createSupervisor({getSession:()=>session,getProfile:()=>profile});
 const accountMenu=createAccountMenu({getSession:()=>session,getProfile:()=>profile});
 const notificationCenter=createNotificationCenter({getSession:()=>session,onOpenTask:openAdminNotificationTask,onOpenPresence:(day,mode)=>dailyPresence.openNotice(day,mode)});
 const pushControls=createPushControls({getSession:()=>session,mount:notificationCenter.host,getProfile:()=>profile,openSettings:()=>notificationCenter.openSettings()});
@@ -570,6 +572,7 @@ async function openAdminNotificationTask(task){
  for(let parent=row.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
  row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
 }
+
 
 
 
