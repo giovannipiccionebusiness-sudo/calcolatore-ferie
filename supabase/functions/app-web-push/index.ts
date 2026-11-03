@@ -62,6 +62,7 @@ async function send(item:any,row:any){
  if(validKeys(sub.push_keys)){const details=webpush.generateRequestDetails({endpoint:sub.endpoint,keys:sub.push_keys},JSON.stringify({...notificationText(item),id:String(item.id),eventKey:item.event_key}),{TTL:ttl,urgency,contentEncoding:'aes128gcm',vapidDetails:{subject:'https://giovannipiccionebusiness-sudo.github.io/calcolatore-ferie/',publicKey:row.public_key,privateKey:row.private_jwk.d}});headers=details.headers;payload=details.body;}
  const response=await fetch(sub.endpoint,{method:'POST',headers,body:payload,redirect:'error',signal:AbortSignal.timeout(10000)});
  if(response.status===404||response.status===410){await db.from('test_push_subscriptions').delete().eq('id',sub.id);return 'expired';}
+ if(!response.ok)console.error('push-provider-rejection',JSON.stringify({queueId:item.id,status:response.status}));
  const state=response.ok?'sent':item.attempts>=3?'failed':'pending';await db.from('test_push_queue').update({state,attempted_at:new Date().toISOString()}).eq('id',item.id);return response.ok?'sent':'retry';
 }
 Deno.serve(async req=>{
@@ -71,7 +72,7 @@ Deno.serve(async req=>{
   if(body.action==='dispatch'){
    const row=await config();if(!req.headers.get('x-push-job')||req.headers.get('x-push-job')!==row.job_token)return reply({error:'Non autorizzato'},401);
    if(!row.private_jwk)return reply({sent:0});const {data,error}=await db.rpc('test_claim_push');if(error)throw error;let sent=0;
-   for(const item of data||[]){try{if(await send(item,row)==='sent')sent++;}catch{await db.from('test_push_queue').update({state:item.attempts>=3?'failed':'pending',attempted_at:new Date().toISOString()}).eq('id',item.id);}}
+   for(const item of data||[]){try{if(await send(item,row)==='sent')sent++;}catch(e){console.error('push-dispatch-failure',JSON.stringify({queueId:item.id,code:(e as any)?.code||null,message:String((e as any)?.message||e).replace(/https?:\/\/\S+/g,'[endpoint]').slice(0,300)}));await db.from('test_push_queue').update({state:item.attempts>=3?'failed':'pending',attempted_at:new Date().toISOString()}).eq('id',item.id);}}
    return reply({sent});
   }
   const bearer=req.headers.get('Authorization')?.replace(/^Bearer /i,'');if(!bearer)return reply({error:'Accedi prima di attivare le notifiche.'},401);
