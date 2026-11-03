@@ -7,6 +7,7 @@ const b64=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll('+'
 const encode=(v:unknown)=>b64(new TextEncoder().encode(JSON.stringify(v)));
 export function validEndpoint(value:string){try{const u=new URL(value);return u.protocol==='https:'&&!u.port&&!u.username&&!u.password&&u.pathname.length>1&&(u.hostname==='fcm.googleapis.com'||u.hostname==='updates.push.services.mozilla.com'||u.hostname.endsWith('.push.apple.com')||u.hostname.endsWith('.notify.windows.com'));}catch{return false;}}
 export function notificationText(item:any){
+ if(item.event_key?.startsWith('admin-presence:'))return {title:item.event_key.split(':')[1]==='week'?'Settimana da verificare':'Giornata da verificare',body:'Un lavoratore ha salvato le presenze. Tocca per aprire la verifica.'};
  if(['colleague_upload','colleague_review','colleague_authorization'].includes(item.kind))return {title:item.kind==='colleague_upload'?'Documento caricato per te':item.kind==='colleague_review'?'Esito verifica documento':'Esito della tua richiesta',body:item.message};
  const month=item.target_month||item.event_key?.split(':')[1]?.slice(0,7)||new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()).slice(0,7);
  const label=/^\d{4}-(0[1-9]|1[0-2])$/.test(month)?new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric',timeZone:'Europe/Rome'}).format(new Date(month+'-15T12:00:00Z')):'del mese';
@@ -20,12 +21,20 @@ export function notificationText(item:any){
  if(item.kind==='activation')return {title:'Il tuo account è stato abilitato',body:'Il responsabile ha abilitato il tuo account. Accedi a Lavoro Facile per caricare le presenze e i tuoi documenti.'};
  return {title:'Notifica di prova',body:'Gli avvisi di Lavoro Facile funzionano su questo telefono.'};
 }
+export function parsePresenceEvent(key:unknown){
+ if(typeof key!=='string')return null;const m=key.match(/^admin-presence:(day|week):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])):([1-9]\d*)$/i);if(!m)return null;return {mode:m[1],worker:m[2],day:m[3],version:Number(m[4])};
+}
 function validKeys(value:any){try{return typeof value?.p256dh==='string'&&typeof value?.auth==='string'&&Uint8Array.from(atob(value.p256dh.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0)).length===65&&Uint8Array.from(atob(value.auth.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0)).length===16;}catch{return false;}}
 async function config(){const {data,error}=await db.from('test_push_config').select('*').eq('id',true).single();if(error)throw error;return data;}
 async function keys(){let row=await config();if(!row.public_key){const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);const public_key=b64(new Uint8Array(await crypto.subtle.exportKey('raw',pair.publicKey)));const private_jwk=await crypto.subtle.exportKey('jwk',pair.privateKey);const {error}=await db.from('test_push_config').update({public_key,private_jwk}).eq('id',true).is('public_key',null);if(error)throw error;row=await config();}return row;}
 async function stillNeeded(item:any,sub:any){
  const {data:p,error}=await db.from('profiles').select('active,role').eq('id',sub.user_id).single();if(error||!p)return false;
  if(item.kind==='test')return true;
+ if(item.event_key?.startsWith('admin-presence:')){
+  if(!p.active||p.role!=='admin'||sub.app_scope!=='production')return false;
+  const task=parsePresenceEvent(item.event_key);if(!task)return false;
+  const {data,error:e}=await db.rpc('get_pending_presence_reviews');if(e)throw e;return (data||[]).some((r:any)=>r.target_id===task.worker&&r.day===task.day&&r.mode===task.mode&&r.version===task.version);
+ }
  if(['admin_registration','admin_review','admin_authorization'].includes(item.kind)){
   if(!p.active||p.role!=='admin'||sub.app_scope!=='production')return false;
   const id=item.event_key?.split(':')[1];if(!id)return false;
@@ -68,6 +77,14 @@ Deno.serve(async req=>{
   const bearer=req.headers.get('Authorization')?.replace(/^Bearer /i,'');if(!bearer)return reply({error:'Accedi prima di attivare le notifiche.'},401);
   const {data:{user},error}=await db.auth.getUser(bearer);if(error||!user)return reply({error:'Sessione scaduta. Accedi nuovamente.'},401);
   const {data:profile}=await db.from('profiles').select('active,role').eq('id',user.id).single();if(!profile)return reply({error:'Profilo non disponibile'},403);
+  if(body.action==='presence_task'){
+   if(!profile.active||profile.role!=='admin')return reply({error:'Accedi come amministratore.'},403);
+   const task=parsePresenceEvent(body.eventKey);if(!task)return reply({error:'Collegamento presenze non valido.'},400);
+   const {data,error:e}=await db.rpc('get_pending_presence_reviews');if(e)throw e;
+   const found=(data||[]).find((r:any)=>r.target_id===task.worker&&r.day===task.day&&r.mode===task.mode);
+   if(!found)return reply({error:'Queste presenze sono già state verificate o sono state sostituite. Consulta il foglio presenze.'},409);
+   return reply({task:found});
+  }
   if(body.action==='admin_tasks'){
    if(!profile.active||profile.role!=='admin')return reply({error:'Solo l’amministratore può consultare le attività.'},403);
    const offset=Number.isInteger(body.offset)?body.offset:0;
@@ -116,6 +133,7 @@ Deno.serve(async req=>{
   const result=await send(item,await keys());return result==='sent'?reply({ok:true}):reply({error:'Notifica non consegnata. Disattiva e riattiva le notifiche, poi riprova.'},502);
  }catch{return reply({error:'Servizio notifiche momentaneamente non disponibile. Riprova più tardi.'},500);}
 });
+
 
 
 
