@@ -1,10 +1,10 @@
 import {createNotificationReport} from './notification-report.js?v=98';
 import {createSupervisor} from './supervisor.js?v=101';
-import {createWeekChanges} from './week-changes.js?v=85';
+import {createWeekChanges} from './week-changes.js?v=104';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=100';
-import './app-version.js?v=103';
+import './app-version.js?v=104';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=100';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -571,6 +571,7 @@ async function openAdminNotificationTask(task){
  for(let parent=row.parentElement;parent;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;if(parent.hasAttribute('data-admin-worker'))parent.hidden=false;}
  row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
 }
+
 
 
 
