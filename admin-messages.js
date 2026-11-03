@@ -8,7 +8,7 @@ export function createAdminMessages({getSession,getProfile}){
  let people=[],busy=false,lastPayload='',requestId='';
  const now=new Date();month.value=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(now).slice(0,7);
  const allowed=()=>!!getSession()&&getProfile()?.active&&getProfile()?.role==='admin';
- const siteName=v=>({N153:'Corte d’Appello',N148:'ENAV'}[v]||v);
+ const siteName=v=>({N153:'Corte d’Appello',N148:'ENAV',N154:'N154 - Acquedotto Pugliese'}[v]||v);
  function renderWorkers(){const chosen=worker.value;worker.replaceChildren(new Option('Tutti i lavoratori della sede selezionata',''));for(const p of people.filter(p=>p.active&&p.role==='worker'&&(!site.value||site.value===p.site)))worker.append(new Option(p.full_name||'Lavoratore',p.id));worker.value=[...worker.options].some(o=>o.value===chosen)?chosen:'';}
  function monthlyText(){if(!month.value)return '';const label=new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'}).format(new Date(month.value+'-15T12:00:00'));return 'Caro collaboratore, ti chiedo di completare il foglio presenze di '+label+' fino a fine mese e di caricarlo, firmato, nell’app con “Invia foglio definitivo”. Ti chiedo inoltre di comunicare tempestivamente al responsabile eventuali modifiche successive. Grazie per la collaborazione.';}
  function update(reset=false){monthBox.hidden=kind.value!=='monthly_request';month.required=kind.value==='monthly_request';if(reset&&kind.value==='monthly_request')text.value=monthlyText();preview.textContent=text.value?'Anteprima: '+text.value:'';}
@@ -31,4 +31,5 @@ export function createAdminMessages({getSession,getProfile}){
  };
  return {refresh(list){panel.hidden=!allowed();if(!allowed()){people=[];text.value='';result.textContent='';lastPayload='';return;}if(list){people=list;const selected=site.value;site.replaceChildren(new Option('Tutte le sedi',''));for(const v of [...new Set(people.filter(p=>p.active&&p.role==='worker'&&p.site).map(p=>p.site))].sort())site.append(new Option(siteName(v),v));site.value=[...site.options].some(o=>o.value===selected)?selected:'';renderWorkers();}}};
 }
+
 
