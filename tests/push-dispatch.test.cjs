@@ -1,0 +1,9 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),{stripTypeScriptTypes}=require('node:module'),crypto=require('node:crypto').webcrypto;
+const source=stripTypeScriptTypes(fs.readFileSync(__dirname+'/../supabase/functions/app-web-push/index.ts','utf8').replace(/^import .*\n/gm,'').replaceAll('export function','function'));
+test('scheduled dispatch sends a current presence notice to provider and records success',async()=>{
+const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);const jwk=await crypto.subtle.exportKey('jwk',pair.privateKey);let handler,calls=0,updates=[];
+const worker='11111111-1111-4111-8111-111111111111',item={id:42,subscription_id:'sub',kind:'admin_review',event_key:`admin-presence:day:${worker}:2026-11-03:3`,attempts:1};
+const db={from(table){const q={select(){return q},eq(){return q},update(x){updates.push(x);return q},then(r){return Promise.resolve({}).then(r)},single:async()=>({data:table==='test_push_config'?{job_token:'fixture',public_key:'fixture',private_jwk:jwk}:{active:true,role:'admin'}}),maybeSingle:async()=>({data:{endpoint:'https://fcm.googleapis.com/fixture',user_id:'admin',app_scope:'production',push_keys:null}})};return q},rpc:async name=>({data:name==='test_claim_push'?[item]:[{target_id:worker,day:'2026-11-03',mode:'day',version:3}]})};
+const ctx={createClient:()=>db,Deno:{env:{get:()=>''},serve:f=>handler=f},webpush:{},TextEncoder,URL,Request,Response,crypto,AbortSignal,btoa:s=>Buffer.from(s,'binary').toString('base64'),fetch:async()=>{calls++;return {ok:true,status:201}},console};vm.runInNewContext(source,ctx);
+const r=await handler(new Request('https://fixture.invalid',{method:'POST',headers:{'x-push-job':'fixture'},body:JSON.stringify({action:'dispatch'})}));assert.equal(r.status,200);assert.equal((await r.json()).sent,1);assert.equal(calls,1);assert.equal(updates.at(-1).state,'sent');
+});
