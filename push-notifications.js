@@ -11,6 +11,7 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  const reminderAnchor=document.getElementById('workerArea');if(reminderAnchor)reminderAnchor.prepend(reminder);else document.getElementById('loggedArea').before(reminder);
  reminder.querySelector('button').onclick=()=>{openSettings();};
  function remind(active=false,message='Attiva le notifiche per ricordarti di inserire ore e assenze.'){
+  panel.hidden=!getSession();
   reminder.hidden=!getSession()||getProfile()?.role!=='worker'||!getProfile()?.active||active;
   reminder.querySelector('p').textContent=message;
  }
@@ -52,8 +53,9 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  async function current(){if(!supported())return null;return (await registration()).pushManager.getSubscription();}
  async function refresh(){
   if(busy)return;
-  const user=getSession()?.user.id,version=++refreshId;repairRequired=false;remind(false);
-  panel.hidden=!user;manage.hidden=true;if(panel.hidden){settingsOpen=false;return;}
+  const user=getSession()?.user.id,version=++refreshId;repairRequired=false;reminder.hidden=true;
+  panel.hidden=!user||(!mount&&!settingsOpen);manage.hidden=true;if(!user){settingsOpen=false;return;}
+  status.textContent='Controllo degli avvisi in corso…';
   enable.hidden=later.hidden=test.hidden=disable.hidden=true;help.hidden=true;const administrator=getProfile()?.active&&getProfile()?.role==='admin';heading.textContent=administrator?'🔔 Vuoi ricevere gli avvisi da gestire?':'🔔 Vuoi un promemoria per le presenze?';intro.textContent=administrator?'Ricevi avvisi per gli account da abilitare, i documenti da verificare e le richieste da autorizzare.':'Ti avvisiamo quando manca il foglio e quando il tuo account viene abilitato. I dati dei documenti restano dentro l’app.';intro.hidden=false;
   if(ios()&&!standalone()){status.textContent=postponed()?'Va bene, puoi continuare a usare l’app e attivare gli avvisi quando vuoi.':'Bastano tre passaggi per preparare il tuo iPhone.';intro.hidden=postponed();enable.hidden=false;later.hidden=postponed();enable.textContent='Mostrami i passaggi';guide(true);help.hidden=false;remind(false,'Su iPhone aggiungi prima l’app alla schermata Home, poi attiva gli avvisi. Ti mostriamo i passaggi.');return;}
   if(!supported()){status.textContent='Puoi continuare a usare l’app. Per gli avvisi serve un browser aggiornato che supporti le notifiche.';remind(false,'Per ricevere gli avvisi sul telefono serve un browser aggiornato compatibile. Apri le istruzioni.');return;}
@@ -93,6 +95,7 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  disable.onclick=()=>run(async()=>{await deactivate();busy=false;await refresh();busy=true;status.textContent='Notifiche disattivate su questo dispositivo.';});
  return {refresh,showSettings:()=>{settingsOpen=true;return refresh();},beforeLogout:async()=>{try{await Promise.race([deactivate(),new Promise(r=>setTimeout(r,2000))]);}catch{/* Logout must still complete; invalid endpoints expire on the push service. */}}};
 }
+
 
 
 
