@@ -1,10 +1,10 @@
 import {createNotificationReport} from './notification-report.js?v=98';
-import {createSupervisor} from './supervisor.js?v=97';
+import {createSupervisor} from './supervisor.js?v=101';
 import {createWeekChanges} from './week-changes.js?v=85';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=100';
-import './app-version.js?v=100';
+import './app-version.js?v=101';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=100';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -408,7 +408,7 @@ refreshAdmin=async function(){
  if(!deliveries.childNodes.length)deliveries.textContent='Nessun lavoratore attivo nella sede selezionata.';
  const {data,error}=await sb.from('audit_log').select('*').order('created_at',{ascending:false}).limit(100);
  const log=$('auditList');log.replaceChildren();if(error){log.textContent='Impossibile aggiornare lo storico.';return}
- const labels={supervisor_authorization:'Autorizzazione caposervizio',upload:'Documento caricato',review:'Documento verificato / richiesta aggiornata',profile_update:'Profilo aggiornato'};
+ const labels={supervisor_review:'Comunicazione verificata dal caposervizio',supervisor_authorization:'Autorizzazione caposervizio',upload:'Documento caricato',review:'Documento verificato / richiesta aggiornata',profile_update:'Profilo aggiornato'};
  for(const a of data||[]){const row=node('div',null,'doc-row'),actor=people.find(p=>p.id===a.actor_id);const text=node('div'),d=docs.find(d=>d.id===a.target_id),worker=d?people.find(p=>p.id===d.worker_id):null;
  text.append(node('strong',labels[a.action]||a.action),node('small',dateLabel(a.created_at)+' · '+(actor?.full_name||'Configurazione')));
  if(d)text.append(node('small',(worker?.full_name||d?.recipient_name||'Lavoratore')+' · '+(typeLabel[d.category]||'Documento')));
@@ -574,6 +574,7 @@ async function openAdminNotificationTask(task){
  for(let parent=row.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;
  row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
 }
+
 
 
 

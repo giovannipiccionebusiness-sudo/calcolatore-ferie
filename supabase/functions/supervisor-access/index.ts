@@ -23,7 +23,7 @@ Deno.serve(async(req:Request)=>{
   if(body.action==='list'){
    if(typeof body.month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(body.month))return reply({error:'Seleziona mese e anno.'},400);
    // Select only operational metadata, never health files or their storage paths.
-   const {data:documents,error}=await db.from('documents').select('id,worker_id,recipient_person_key,recipient_name,site,month,category,note,review_status,authorization,review_reason,created_at,authorized_at,reviewed_by')
+   const {data:documents,error}=await db.from('documents').select('id,worker_id,recipient_person_key,recipient_name,site,month,category,note,review_status,authorization,review_reason,created_at,authorized_at,reviewed_by,reviewed_at')
     .in('site',sites).eq('month',body.month).in('category',['ferie','rol','malattia','legge104','congedo_parentale']).order('created_at',{ascending:false}).limit(1000);
    if(error)throw error;
    const workerIds=[...new Set((documents||[]).map(d=>d.worker_id).filter(Boolean))];
@@ -37,11 +37,16 @@ Deno.serve(async(req:Request)=>{
     return d.worker_id!==user.id&&linked?.account_id!==user.id&&(!d.worker_id||(owner?.site===d.site&&owner?.role==='worker'));
    }).map(d=>{
     const owner=workers?.find(p=>p.id===d.worker_id);
-    return {...d,worker_name:owner?.full_name||d.recipient_name||'Lavoratore',workplace:owner?.workplace||'',can_decide:['ferie','rol'].includes(d.category)&&d.authorization==='pending'&&d.review_status!=='rejected'};
+    return {...d,worker_name:owner?.full_name||d.recipient_name||'Lavoratore',workplace:owner?.workplace||'',can_verify:['malattia','legge104'].includes(d.category)&&d.review_status==='pending',can_decide:['ferie','rol'].includes(d.category)&&d.authorization==='pending'&&d.review_status!=='rejected'};
    });
    return reply({rows,sites});
   }
   if(!uuid(body.document_id))return reply({error:'Documento non valido.'},400);
+  if(body.action==='verify'){
+   const {data,error}=await db.rpc('supervisor_verify',{p_actor:user.id,p_document:body.document_id});
+   if(error)return reply({error:error.message},409);
+   return reply({ok:true,result:data});
+  }
   if(body.action==='decide'){
    if(!['approved','denied'].includes(body.decision)||typeof body.reason!=='string'||body.reason.trim().length>250||(body.decision==='denied'&&!body.reason.trim()))return reply({error:'Indica una motivazione valida (massimo 250 caratteri).'},400);
    const {data,error}=await db.rpc('supervisor_decide',{p_actor:user.id,p_document:body.document_id,p_decision:body.decision,p_reason:body.reason});
@@ -60,3 +65,4 @@ Deno.serve(async(req:Request)=>{
   return reply({error:'Operazione non valida.'},400);
  }catch(e){console.error('supervisor-access',e instanceof Error?e.message:'request failed');return reply({error:'Operazione non completata. Riprova.'},500);}
 });
+
