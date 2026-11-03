@@ -25,18 +25,33 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
  }
  function showTasks(){settingsShown=false;tasksShown=true;taskSection.hidden=false;history.hidden=settings.hidden=true;taskTab.setAttribute('aria-pressed','true');messagesTab.setAttribute('aria-pressed','false');settingsTab.setAttribute('aria-pressed','false');renderTasks();}
  taskTab.onclick=()=>{showTasks();loadTasks();};taskPrev.onclick=()=>{taskOffset=Math.max(0,taskOffset-30);loadTasks();};taskNext.onclick=()=>{taskOffset+=30;loadTasks();};taskSection.querySelector('.task-refresh').onclick=()=>{taskOffset=0;loadTasks();};
- let user=null,items=[],offset=0,epoch=0,controller=null,loading=false,settingsShown=false;
+ let user=null,items=[],offset=0,epoch=0,controller=null,loading=false,settingsShown=false,readingPage=false;
  async function api(action,extra={}){
   const session=getSession();if(!session)throw Error('Accedi per leggere le notifiche.');
   const response=await fetch(SUPABASE_URL+'/functions/v1/app-web-push',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token},body:JSON.stringify({action,...extra}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw Error(data.error||'Notifiche non disponibili. Riprova.');return data;
  }
  function count(value){unread=value;const total=value+(tasksData?.total||0);badge.textContent=total>99?'99+':String(total);badge.hidden=!total;bell.setAttribute('aria-label',isAdmin?'Apri notifiche, '+(tasksData?.total||0)+' attività da gestire e '+value+' avvisi da leggere':value?'Apri notifiche, '+value+' da leggere':'Apri notifiche, nessun avviso da leggere');}
  function render(){
-  list.replaceChildren();for(const item of items){const article=document.createElement('article'),button=document.createElement('button'),title=document.createElement('strong'),date=document.createElement('small'),body=document.createElement('div');article.className='notification-item'+(item.read_at?'':' unread');button.type='button';title.textContent=item.title;date.textContent=new Date(item.created_at).toLocaleString('it-IT')+(item.read_at?' · Letto':' · Da leggere');body.className='notification-body';body.textContent=item.body;body.hidden=true;button.setAttribute('aria-expanded','false');button.append(title,date);article.append(button,body);list.append(article);
+  list.replaceChildren();for(const item of items){const article=document.createElement('article'),button=document.createElement('button'),title=document.createElement('strong'),date=document.createElement('small'),body=document.createElement('div');article.className='notification-item'+(item.read_at?'':' unread');article.dataset.noticeId=item.id;button.type='button';title.textContent=item.title;date.textContent=new Date(item.created_at).toLocaleString('it-IT')+(item.read_at?' · Letto':' · Da leggere');body.className='notification-body';body.textContent=item.body;body.hidden=true;button.setAttribute('aria-expanded','false');button.append(title,date);article.append(button,body);list.append(article);
    button.onclick=async()=>{if(['admin_presence_day','admin_presence_week'].includes(item.kind)){try{dialog.close();await openPresenceReviewNotice(item.event_key);}catch(error){result.textContent=error.message;if(!dialog.open)dialog.showModal();}return;}if(['daily_presence','presence_week'].includes(item.kind)){try{const parts=item.event_key.split(':');if(parts[0]!=='presence'||!/^\d{4}-\d{2}-\d{2}$/.test(parts[2]||''))throw Error('Collegamento presenze non valido');await api('read_notice',{id:item.id});dialog.close();await onOpenPresence(parts[2],item.kind==='presence_week'?'week':'day');await load(false,false);}catch(error){result.textContent=error.message;if(!dialog.open)dialog.showModal();}return;}body.hidden=!body.hidden;button.setAttribute('aria-expanded',String(!body.hidden));if(body.hidden||item.read_at)return;const currentUser=user;try{await api('read_notice',{id:item.id});if(user!==currentUser)return;item.read_at=new Date().toISOString();article.classList.remove('unread');date.textContent=new Date(item.created_at).toLocaleString('it-IT')+' · Letto';await load(false,false);}catch(error){result.textContent='Il messaggio è visibile, ma lo stato di lettura non è stato salvato. '+error.message;}};
   }
   if(!items.length)list.textContent=offset?'Non ci sono altri avvisi.':'Non hai ancora notifiche.';
   prev.hidden=!offset;next.hidden=items.length<30;readVisible.disabled=!items.some(item=>!item.read_at);
+ }
+ function unreadLabel(value){return value===1?'1 avviso da leggere.':value?value+' avvisi da leggere.':'Sei in pari: tutti gli avvisi sono letti.';}
+ function messagesVisible(){return dialog.open&&!tasksShown&&!settingsShown;}
+ async function markMessagesRead(){
+  if(readingPage||!getSession()||!messagesVisible())return;
+  const ids=items.filter(item=>!item.read_at).map(item=>item.id);if(!ids.length)return;
+  const owner=getSession().user.id,version=epoch;readingPage=true;readVisible.disabled=true;
+  try{
+   await api('read_notices',{ids});
+   const fresh=await api('inbox',{offset});if(getSession()?.user.id!==owner||epoch!==version)return;
+   const readAt=new Date().toISOString();for(const item of items)if(ids.includes(item.id)){item.read_at=readAt;const article=[...list.children].find(n=>n.dataset.noticeId===item.id);if(article){article.classList.remove('unread');article.querySelector('small').textContent=new Date(item.created_at).toLocaleString('it-IT')+' · Letto';}}
+   if(isAdmin&&fresh.tasks)tasksData=taskOffset?{...fresh.tasks,items:tasksData?.items||[]}:fresh.tasks;
+   count(fresh.unread);result.textContent=unreadLabel(fresh.unread);readVisible.disabled=!items.some(item=>!item.read_at);
+  }catch(error){if(getSession()?.user.id===owner&&epoch===version){result.textContent='Impossibile segnare gli avvisi come letti. Riprova. '+error.message;readVisible.disabled=false;}}
+  finally{readingPage=false;}
  }
  async function load(reset=false,redraw=true){
   const session=getSession();if(!session)return;if(loading&&!reset)return;
@@ -44,7 +59,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
   try{const data=await api('inbox',{offset});if(version!==epoch||getSession()?.user.id!==owner)return;items=data.items;const wasAdmin=isAdmin;isAdmin=!!data.isAdmin;taskTab.hidden=!isAdmin;
    if(isAdmin){tasksData=taskOffset?{...data.tasks,items:tasksData?.items||[]}:data.tasks;if(tasksShown){if(taskOffset)loadTasks();else renderTasks();}}
    else{tasksData=null;if(tasksShown)tab(false);}
-   count(data.unread);if(!wasAdmin&&isAdmin&&dialog.open)showTasks();if(redraw)render();result.textContent=data.unread?data.unread+' avvisi da leggere.':'Sei in pari: tutti gli avvisi sono letti.';}
+   count(data.unread);if(!wasAdmin&&isAdmin&&dialog.open)showTasks();if(redraw)render();result.textContent=unreadLabel(data.unread);if(redraw&&messagesVisible())await markMessagesRead();}
   catch(error){if(version===epoch)result.textContent=error.message;}
   finally{if(version===epoch)loading=false;}
  }
@@ -58,9 +73,10 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
  const refreshIfVisible=()=>{if(document.visibilityState==='visible'&&getSession())load(false,dialog.open&&!settingsShown);};window.addEventListener('focus',refreshIfVisible);document.addEventListener('visibilitychange',refreshIfVisible);setInterval(refreshIfVisible,60000);
  document.addEventListener('push-notice-opened',async event=>{if(!getSession())return;try{if(event.detail?.eventKey)await api('read_notice',{eventKey:event.detail.eventKey});await load(true,dialog.open&&!settingsShown);}catch{}});
  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='PUSH_NOTICE_RECEIVED')refreshIfVisible();});
- async function openPresenceReviewNotice(eventKey){const owner=getSession()?.user.id;if(!owner)throw Error('Accedi come amministratore.');const data=await api('presence_task',{eventKey});if(getSession()?.user.id!==owner)throw Error('Sessione cambiata.');await onOpenTask(data.task);await api('read_notice',{eventKey});await load(true,dialog.open&&!settingsShown);}
+ async function openPresenceReviewNotice(eventKey){const owner=getSession()?.user.id;if(!owner)throw Error('Accedi come amministratore.');await api('read_notice',{eventKey});await load(true,false);const data=await api('presence_task',{eventKey});if(getSession()?.user.id!==owner)throw Error('Sessione cambiata.');await onOpenTask(data.task);await load(true,dialog.open&&!settingsShown);}
  return {refresh,openPresenceReviewNotice,openSettings(){if(!getSession())return;if(!dialog.open)dialog.showModal();tab(true);},host:dialog.querySelector('.notification-settings-host'),setControls(value){controller=value;}};
 }
+
 
 
 
