@@ -16,7 +16,7 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
   reminder.querySelector('p').textContent=message;
  }
  const recheck=()=>{if(document.visibilityState==='visible'&&getSession())refresh();};
- window.addEventListener('focus',recheck);document.addEventListener('visibilitychange',recheck);
+ window.addEventListener('focus',recheck);window.addEventListener('online',recheck);document.addEventListener('visibilitychange',recheck);
  try{navigator.permissions?.query?.({name:'notifications'})?.then(permission=>permission.addEventListener?.('change',recheck)).catch(()=>{});}catch{/* Older browsers may not support querying this permission. */}
  const supported=()=>!!window.Notification&&!!navigator.serviceWorker&&'PushManager' in window;
  const ios=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
@@ -47,11 +47,15 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
  async function deviceStatus(endpoint){const session=getSession();const response=await fetch(SUPABASE_URL+'/functions/v1/notification-report',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token},body:JSON.stringify({action:'device-status',endpoint}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw Error(data.error||'Controllo dispositivo non disponibile.');return data;}
  async function registration(){return Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Error('Aggiornamento dell’app in corso. Chiudi e riapri, poi riprova.')),12000))]);}
  function owner(){try{return localStorage.getItem(OWNER);}catch{return null;}}
+ function wantsPush(user){try{return localStorage.getItem(OWNER+'-enabled-'+user)==='1';}catch{return false;}}
+ function rememberPush(enabled,user=getSession()?.user.id){if(!user)return;try{if(enabled)localStorage.setItem(OWNER+'-enabled-'+user,'1');else localStorage.removeItem(OWNER+'-enabled-'+user);}catch{}}
  function testPassed(){try{return localStorage.getItem(OWNER+'-checked-'+getSession()?.user.id)==='1';}catch{return false;}}
  function markTest(passed){try{const key=OWNER+'-checked-'+getSession()?.user.id;if(passed)localStorage.setItem(key,'1');else localStorage.removeItem(key);}catch{}}
  function setOwner(id){try{if(id)localStorage.setItem(OWNER,id);else localStorage.removeItem(OWNER);}catch{}}
  async function current(){if(!supported())return null;return (await registration()).pushManager.getSubscription();}
- async function refresh(){
+ let refreshing=null,refreshingUser=null;
+ function refresh(){const user=getSession()?.user.id;if(refreshing&&refreshingUser===user)return refreshing;refreshingUser=user;const task=refreshNow();refreshing=task;return task.finally(()=>{if(refreshing===task)refreshing=null;});}
+ async function refreshNow(){
   if(busy)return;
   const user=getSession()?.user.id,version=++refreshId;repairRequired=false;reminder.hidden=true;
   panel.hidden=!user||(!mount&&!settingsOpen);manage.hidden=true;if(!user){settingsOpen=false;return;}
@@ -59,22 +63,33 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
   enable.hidden=later.hidden=test.hidden=disable.hidden=true;help.hidden=true;const administrator=getProfile()?.active&&getProfile()?.role==='admin';heading.textContent=administrator?'🔔 Vuoi ricevere gli avvisi da gestire?':'🔔 Vuoi un promemoria per le presenze?';intro.textContent=administrator?'Ricevi avvisi per gli account da abilitare, i documenti da verificare e le richieste da autorizzare.':'Ti avvisiamo quando manca il foglio e quando il tuo account viene abilitato. I dati dei documenti restano dentro l’app.';intro.hidden=false;
   if(ios()&&!standalone()){status.textContent=postponed()?'Va bene, puoi continuare a usare l’app e attivare gli avvisi quando vuoi.':'Bastano tre passaggi per preparare il tuo iPhone.';intro.hidden=postponed();enable.hidden=false;later.hidden=postponed();enable.textContent='Mostrami i passaggi';guide(true);help.hidden=false;remind(false,'Su iPhone aggiungi prima l’app alla schermata Home, poi attiva gli avvisi. Ti mostriamo i passaggi.');return;}
   if(!supported()){status.textContent='Puoi continuare a usare l’app. Per gli avvisi serve un browser aggiornato che supporti le notifiche.';remind(false,'Per ricevere gli avvisi sul telefono serve un browser aggiornato compatibile. Apri le istruzioni.');return;}
+  let locallyActive=false;
   try{
-   const sub=await current();if(version!==refreshId||getSession()?.user.id!==user)return;
+   let sub=await current();if(version!==refreshId||getSession()?.user.id!==user)return;
+   if(!sub&&(owner()===user||wantsPush(user))&&Notification.permission==='granted'){
+    const {publicKey}=await api('key');if(version!==refreshId||getSession()?.user.id!==user)return;
+    const padded=publicKey.replaceAll('-','+').replaceAll('_','/');const key=Uint8Array.from(atob(padded+'='.repeat((4-padded.length%4)%4)),c=>c.charCodeAt(0));
+    sub=await (await registration()).pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
+   }
    let active=false;
-   if(sub&&owner()===user&&Notification.permission==='granted'){
+   locallyActive=!!sub&&owner()===user&&Notification.permission==='granted';
+   if(sub&&(!owner()||owner()===user)&&Notification.permission==='granted'){
     const keys=sub.toJSON?.().keys;
     if(keys?.p256dh&&keys?.auth){
      await api('subscribe',sub.endpoint,{keys,scope:'production'});
      if(version!==refreshId||getSession()?.user.id!==user)return;
-     const health=await deviceStatus(sub.endpoint);if(version!==refreshId||getSession()?.user.id!==user)return;repairRequired=health.repair===true;active=!repairRequired;
+     setOwner(user);rememberPush(true,user);locallyActive=true;
+     const health=await deviceStatus(sub.endpoint);if(version!==refreshId||getSession()?.user.id!==user)return;repairRequired=false;active=true;
     }
    }
    const blocked=Notification.permission==='denied';
    remind(active,blocked?'Gli avvisi sono bloccati su questo telefono. Apri le istruzioni per consentirli.':'Attiva le notifiche per ricordarti di inserire ore e assenze.');
    enable.hidden=active;later.hidden=active||postponed();disable.hidden=!active;test.hidden=!active||testPassed();enable.disabled=false;enable.textContent=blocked?'Mostrami come attivarli':postponed()?'Attiva gli avvisi':'Sì, attiva gli avvisi';help.hidden=active||!blocked;if(blocked)guide();if(active){heading.textContent='🔔 Gli avvisi sono attivi';intro.hidden=true;help.open=false;}else if(postponed()){heading.textContent='🔔 Avvisi sul telefono';intro.hidden=true;}manage.hidden=!!mount||!(active&&testPassed());manage.textContent=settingsOpen?'Chiudi impostazioni avvisi':'Gestisci avvisi';manage.setAttribute('aria-expanded',String(settingsOpen));panel.hidden=!mount&&active&&testPassed()&&!settingsOpen;status.textContent=active?(administrator?'Riceverai gli avvisi per le attività da gestire, anche con l’app chiusa.':'Ricevi i promemoria giornalieri mezz’ora prima della fine del turno, se la giornata non è compilata, e il riepilogo del venerdì.'):postponed()?'Va bene, puoi continuare a usare l’app e attivare gli avvisi quando vuoi.':blocked?'Gli avvisi sono bloccati sul telefono. Ti accompagniamo passo passo per riattivarli.':'Premi “Sì, attiva gli avvisi”, poi scegli “Consenti” nella richiesta del telefono.';
-   if(repairRequired){heading.textContent='🔔 Ripristina gli avvisi';status.textContent='L’ultimo promemoria non è stato accettato per questo telefono. Premi Ripristina avvisi, poi verifica la ricezione.';enable.textContent='Ripristina avvisi';remind(false,'Gli avvisi di questo telefono richiedono attenzione. Premi il pulsante per ripristinarli.');reminder.querySelector('button').textContent='Ripristina avvisi';}else reminder.querySelector('button').textContent='Attiva notifiche';
-  }catch(e){if(version!==refreshId||getSession()?.user.id!==user)return;status.textContent=e.message;enable.hidden=false;remind(false,'Non è stato possibile confermare l’attivazione. Apri le impostazioni e riprova.');}
+   reminder.querySelector('button').textContent='Attiva notifiche';
+  }catch(e){if(version!==refreshId||getSession()?.user.id!==user)return;
+   if(locallyActive){remind(true);heading.textContent='🔔 Gli avvisi restano attivi sul telefono';intro.hidden=true;status.textContent='Controllo del collegamento non riuscito. Riproveremo automaticamente quando torni nell’app.';enable.hidden=later.hidden=true;disable.hidden=false;test.hidden=false;}
+   else{status.textContent=e.message;enable.hidden=false;reminder.hidden=true;}
+  }
  }
  async function run(task){if(busy)return;busy=true;for(const b of [enable,later,test,disable])b.disabled=true;try{await task();}catch(e){status.textContent=e.message;}finally{busy=false;for(const b of [enable,later,test,disable])b.disabled=false;}}
  later.onclick=()=>{postpone(true);help.open=false;refresh();};
@@ -85,16 +100,17 @@ export function createPushControls({getSession,mount=null,getProfile=()=>null,op
   const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();if(permission!=='granted'){if(permission==='denied'){guide();help.hidden=false;help.open=true;enable.textContent='Mostrami come attivarli';status.textContent='Gli avvisi sono bloccati. Segui i passaggi qui sotto per riattivarli.';}else{status.textContent='Nessun problema: puoi usare l’app e attivare gli avvisi più avanti. Quando riprovi, scegli “Consenti” nella richiesta del telefono.';}return;}
   postpone(false);
   status.textContent='Attivazione in corso…';const {publicKey}=await api('key'),reg=await registration();let sub=await reg.pushManager.getSubscription();
-  if(sub&&(owner()!==user||repairRequired)){await sub.unsubscribe();sub=null;}
+  if(sub&&((owner()&&owner()!==user)||repairRequired)){await sub.unsubscribe();sub=null;}
   const fresh=!sub;if(fresh)markTest(false);if(!sub){const padded=publicKey.replaceAll('-','+').replaceAll('_','/');const key=Uint8Array.from(atob(padded+'='.repeat((4-padded.length%4)%4)),c=>c.charCodeAt(0));sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});}
-  try{if(getSession()?.user.id!==user)throw Error('Account cambiato. Riprova.');await api('subscribe',sub.endpoint,{keys:sub.toJSON?.().keys,scope:'production'});setOwner(user);}catch(e){if(fresh)await sub.unsubscribe();throw e;}
+  try{if(getSession()?.user.id!==user)throw Error('Account cambiato. Riprova.');await api('subscribe',sub.endpoint,{keys:sub.toJSON?.().keys,scope:'production'});setOwner(user);rememberPush(true,user);}catch(e){setOwner(user);rememberPush(true,user);throw e;}
   busy=false;await refresh();busy=true;status.textContent='Notifiche attivate. Premi “Verifica ricezione sul mio telefono” per controllare la ricezione.';
  });};
  test.onclick=()=>run(async()=>{const sub=await current();if(!sub)throw Error('Attiva prima le notifiche.');await api('test',sub.endpoint);markTest(true);test.hidden=true;settingsOpen=false;panel.hidden=!mount;manage.hidden=!!mount;manage.textContent='Gestisci avvisi';manage.setAttribute('aria-expanded','false');status.textContent='Prova inviata al tuo telefono. Controlla le notifiche: gli avvisi restano attivi e i promemoria arriveranno automaticamente.';});
- async function deactivate(){if(!supported())return;const registrationNow=await navigator.serviceWorker.getRegistration('./');if(!registrationNow)return;const sub=await registrationNow.pushManager.getSubscription();let error=null;if(sub){await sub.unsubscribe();try{if(getSession()&&owner()===getSession().user.id)await api('unsubscribe',sub.endpoint);}catch(e){error=e;}}markTest(false);setOwner(null);const reg=await registration();for(const n of await reg.getNotifications())n.close();if(error)throw Error('Notifiche disattivate sul telefono. La pulizia sul server sarà completata automaticamente.');}
+ async function deactivate(remember=false){const user=getSession()?.user.id;++refreshId;if(remember){if(owner()===user)rememberPush(true,user);}else rememberPush(false,user);if(!supported())return;const registrationNow=await navigator.serviceWorker.getRegistration('./');if(!registrationNow)return;const sub=await registrationNow.pushManager.getSubscription();let error=null;if(sub){await sub.unsubscribe();try{if(getSession()&&owner()===getSession().user.id)await api('unsubscribe',sub.endpoint);}catch(e){error=e;}}markTest(false);setOwner(null);const reg=await registration();for(const n of await reg.getNotifications())n.close();if(error)throw Error('Notifiche disattivate sul telefono. La pulizia sul server sarà completata automaticamente.');}
  disable.onclick=()=>run(async()=>{await deactivate();busy=false;await refresh();busy=true;status.textContent='Notifiche disattivate su questo dispositivo.';});
- return {refresh,showSettings:()=>{settingsOpen=true;return refresh();},beforeLogout:async()=>{try{await Promise.race([deactivate(),new Promise(r=>setTimeout(r,2000))]);}catch{/* Logout must still complete; invalid endpoints expire on the push service. */}}};
+ return {refresh,showSettings:()=>{settingsOpen=true;return refresh();},beforeLogout:async()=>{try{await Promise.race([deactivate(true),new Promise(r=>setTimeout(r,2000))]);}catch{/* Logout must still complete; invalid endpoints expire on the push service. */}}};
 }
+
 
 
 

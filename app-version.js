@@ -1,6 +1,6 @@
 // Updates are offered only when newer code is available; work is never reloaded automatically.
-export const APP_VERSION=101;
-export const APP_VERSION_LABEL='9.11';
+export const APP_VERSION=102;
+export const APP_VERSION_LABEL='9.12';
 export function installVersionControls(){
  const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Lavoro Facile · Versione '+APP_VERSION_LABEL;
  (document.querySelector('main')||document.body).append(footer);
@@ -29,7 +29,7 @@ export function installVersionControls(){
      });
      await registration.update();
      if(!await controllerChanged){
-      await registration.unregister();
+      // Keep the registration: unregistering can invalidate push subscriptions.
       if(window.caches){const names=await caches.keys();await Promise.all(names.filter(name=>name.startsWith('ferie-facili-production-')).map(name=>caches.delete(name)));}
      }
     }
@@ -43,6 +43,7 @@ export function installVersionControls(){
  return {check};
 }
 export const versionControls=installVersionControls();
+
 
 
 
