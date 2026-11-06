@@ -35,3 +35,6 @@ main:has(#presenceConsole[open]){max-width:1500px}
 
 
 .pc-day.pc-declared{background:#fff2cf;border:1px solid #d6b76e;color:#6b4d10}.pc-day.pc-draft-incomplete{background:#fff0e4;border:1px solid #dda875;color:#7d491b}
+
+
+.pc-table .pc-day{cursor:default}.pc-inline-verify,.pc-inline-details{display:block;width:100%;min-height:36px;border-radius:8px;margin:6px 0 0;padding:7px 8px;font:600 12px system-ui;cursor:pointer}.pc-inline-verify{background:#087e71;color:#fff;border:1px solid #087e71}.pc-inline-details{background:transparent;color:#075d52;border:1px solid #bfd8cf}.presence-console[aria-busy=true] .pc-inline-verify,.presence-console[aria-busy=true] .pc-inline-details{opacity:.5;pointer-events:none}
