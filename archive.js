@@ -1,3 +1,4 @@
+import {downloadDocument} from './document-download.js?v=116';
 // Private, read-only worker archive. Supabase RLS remains authoritative.
 export function createWorkerArchive({client,allowed,openFile,typeLabel,stageLabel,statusLabel,renderScan=()=>{},onReset=()=>{},reviewDocument=()=>{}}){
  const $=id=>document.getElementById(id),pageSize=20;
@@ -36,7 +37,7 @@ export function createWorkerArchive({client,allowed,openFile,typeLabel,stageLabe
   try{const {zipSync,strToU8}=await import('./vendor/fflate.js');guardExport(g);let files=Object.create(null),bytes=0,part=0,ok=0;const report=['Esportazione originali · '+month,'Documenti previsti: '+rows.length],limit=60*1024*1024;
    const packagePart=()=>{if(!Object.keys(files).length)return;guardExport(g);const zip=zipSync(files,{level:0}),url=URL.createObjectURL(new Blob([zip],{type:'application/zip'}));exportUrls.push(url);const a=el('a','Scarica ZIP · parte '+(++part),'doc-button outline');a.style.display='block';a.style.textAlign='center';a.href=url;a.download='Documenti_'+month+'_parte-'+part+'.zip';exportLinks.append(a);files=Object.create(null);bytes=0;};
    for(let i=0;i<rows.length;i++){guardExport(g);const d=rows[i];exportStatus.textContent='Preparazione '+(i+1)+' di '+rows.length+' · '+exportName(d);
-    try{const {data,error}=await api.storage.from('private-documents').download(d.file_path);guardExport(g);if(error)throw error;if(bytes+data.size>limit)packagePart();const path=cleanName(exportName(d))+'_'+cleanName(groupKey(d))+'/'+cleanName(typeLabel[d.category]||d.category)+'/'+cleanName(d.stage)+'_'+d.id+'_'+cleanName(d.file_name);files[path]=new Uint8Array(await data.arrayBuffer());bytes+=data.size;ok++;report.push('OK · '+path);}
+    try{const data=await downloadDocument(api,d);guardExport(g);if(bytes+data.size>limit)packagePart();const path=cleanName(exportName(d))+'_'+cleanName(groupKey(d))+'/'+cleanName(typeLabel[d.category]||d.category)+'/'+cleanName(d.stage)+'_'+d.id+'_'+cleanName(d.file_name);files[path]=new Uint8Array(await data.arrayBuffer());bytes+=data.size;ok++;report.push('OK · '+path);}
     catch(e){guardExport(g);report.push('ERRORE · '+exportName(d)+' · '+d.id+' · '+e.message);}
     await new Promise(resolve=>setTimeout(resolve,0));
    }

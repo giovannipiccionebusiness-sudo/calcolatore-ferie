@@ -1,12 +1,13 @@
+import {documentObjectUrl} from './document-download.js?v=116';
 import {createNotificationReport} from './notification-report.js?v=98';
 import {createSupervisor} from './supervisor.js?v=101';
 import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
-import {createPresenceConsole} from './presence-ui.js?v=112';
-import './app-version.js?v=115';
+import {createPresenceConsole} from './presence-ui.js?v=116';
+import './app-version.js?v=116';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
-import {createHourBudget} from './hour-budget-ui.js?v=100';
+import {createHourBudget} from './hour-budget-ui.js?v=116';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
@@ -20,8 +21,8 @@ import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from '
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
-import {createWorkerArchive} from './archive.js?v=35';
-import {createAutoArchiveScanner} from './auto-scan.js?v=35';
+import {createWorkerArchive} from './archive.js?v=116';
+import {createAutoArchiveScanner} from './auto-scan.js?v=116';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=35';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
@@ -320,12 +321,7 @@ async function sendUploadDraft(draft){
 async function openFile(d){
  try{
   msg('Apertura documento…');
-  const {data,error}=await sb.storage.from('private-documents').createSignedUrl(d.file_path,90);
-  if(error)throw error;
-  if(!data?.signedUrl)throw new Error('Collegamento al documento non disponibile. Riprova.');
-  // Same-tab navigation works after the asynchronous request without popup permissions.
-  // The browser Back action returns to the app; the private link expires after 90 seconds.
-  window.location.assign(data.signedUrl);
+  window.location.assign(await documentObjectUrl(sb,d));
  }catch(e){err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});}
 }
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';

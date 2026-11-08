@@ -95,7 +95,7 @@ async function worker(){
   let parent=root;
   const kind=d.category==="presenze"?(d.stage==="final"?"Presenze definitive":"Presenze settimanali"):types[d.category];
   if(!kind)throw new Error("Unsupported document category");
-  const names=[d.site==="N153"?"N153 - Corte d’Appello":"N148 - ENAV",(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",d.month.slice(0,4),kind,d.month.slice(5,7)];
+  const names=[({N153:"N153 - Corte d’Appello",N148:"N148 - ENAV",N154:"N154 - Acquedotto Pugliese"} as Record<string,string>)[d.site]||d.site,(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",d.month.slice(0,4),kind,d.month.slice(5,7)];
   const keys=[d.site,p.key,d.month.slice(0,4),kind,d.month.slice(5,7)];
   let path="root";
   for(let i=0;i<keys.length;i++){path+="/"+keys[i];parent=await folder(access,path,names[i],parent);}
@@ -127,6 +127,25 @@ async function worker(){
   return {processed:1,archived:false,error:message};
  }
 }
+async function readArchived(req:Request,documentId:unknown){
+ if(typeof documentId!=="string"||!/^[0-9a-f-]{36}$/i.test(documentId))return json({error:"Documento non valido"},400);
+ const jwt=(req.headers.get("Authorization")||"").replace(/^Bearer /i,"");
+ const {data:auth,error}=await db.auth.getUser(jwt);
+ if(error||!auth.user)return json({error:"Accedi nuovamente"},401);
+ const scoped=createClient(SUPABASE_ENDPOINT,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:"Bearer "+jwt}}});
+ const {data:doc,error:denied}=await scoped.from("documents").select("id").eq("id",documentId).maybeSingle();
+ if(denied||!doc)return json({error:"Documento non accessibile"},404);
+ const archived=must(await db.from("drive_archive_jobs").select("google_file_id,sha256").eq("document_id",doc.id).eq("status","archived").maybeSingle()) as any;
+ if(!archived?.google_file_id||!archived.sha256)return json({error:"Copia Drive non disponibile"},404);
+ const connection=must(await db.from("drive_credentials").select("refresh_token").eq("singleton",true).single()) as any;
+ const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
+ const response=await request("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(archived.google_file_id)+"?alt=media",{headers:{Authorization:"Bearer "+access}});
+ if(!response.ok)return json({error:"Copia Drive non disponibile"},502);
+ const bytes=await response.arrayBuffer();
+ if(bytes.byteLength>12582912||await digest(bytes)!==archived.sha256)return json({error:"Verifica della copia Drive non riuscita"},502);
+ const mime=response.headers.get("Content-Type")?.split(";")[0]||"";
+ return new Response(bytes,{headers:{...headers,"Content-Type":["application/pdf","image/jpeg","image/png","image/webp"].includes(mime)?mime:"application/octet-stream","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Content-Security-Policy":"sandbox"}});
+}
 Deno.serve(async(req:Request)=>{
  const path=new URL(req.url).pathname;
  if(req.method==="OPTIONS")return new Response(null,{headers});
@@ -153,8 +172,9 @@ Deno.serve(async(req:Request)=>{
    if(req.headers.get("x-drive-worker")!==runtime.worker_key)return json({error:"Unauthorized"},401);
    return json(await worker());
   }
-  const user=await admin(req);
   const {action,document_id}=await req.json();
+  if(action==="read-archived")return await readArchived(req,document_id);
+  const user=await admin(req);
   if(action==="status"){
    const c=must(await db.from("drive_credentials").select("connected_at,root_id").eq("singleton",true).maybeSingle());
    const jobs=must(await db.from("drive_archive_jobs").select("*").order("created_at",{ascending:false}).limit(200));
