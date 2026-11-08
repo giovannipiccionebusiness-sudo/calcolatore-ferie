@@ -73,7 +73,7 @@ async function processScan(){
   await guard(d.id,lease);
   const original=must(await db.from('drive_archive_jobs').select('*').eq('document_id',d.id).single()) as any;if(original.status!=='archived'||!original.google_file_id||!original.sha256)throw Error('Original not ready');
   const om=await metadata(access,original.google_file_id);if(!om||om.appProperties?.documentId!==d.id||om.appProperties?.sha256!==original.sha256||!om.parents?.length)throw Error('Original Drive identity mismatch');
-  const source=await db.storage.from('private-documents').download(d.file_path);if(source.error||!source.data||await digest(await source.data.arrayBuffer())!==original.sha256)throw Error('Original source/hash mismatch');await verifyBytes(access,original.google_file_id,original.sha256);
+  await verifyBytes(access,original.google_file_id,original.sha256);
   const stored=await db.storage.from('document-scans-test').download(scan.file_path);if(stored.error||!stored.data)throw Error('Scan unavailable');const bytes=await stored.data.arrayBuffer();if(bytes.byteLength>12582912)throw Error('Scan too large');const hash=await digest(bytes);
   let id=job.google_scan_id;if(!id){const allocatedId=await allocated(access);const row=must(await db.from('document_scan_archive_jobs').update({google_scan_id:allocatedId}).eq('document_id',d.id).eq('lease_id',lease).select('google_scan_id').single()) as any;id=row.google_scan_id;}
   await guard(d.id,lease);let sm=await metadata(access,id);

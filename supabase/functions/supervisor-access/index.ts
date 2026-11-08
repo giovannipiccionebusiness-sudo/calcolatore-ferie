@@ -53,11 +53,24 @@ Deno.serve(async(req:Request)=>{
    if(error)return reply({error:error.message},409);
    return reply({ok:true,result:data});
   }
-  if(body.action==='open'){
+  if(body.action==='open'||body.action==='open-file'){
    const {data:d,error}=await db.from('documents').select('worker_id,recipient_person_key,site,category,file_path').eq('id',body.document_id).single();
    if(error||!d||!sites.includes(d.site)||!['ferie','rol'].includes(d.category)||d.worker_id===user.id)return reply({error:'Documento non accessibile.'},403);
    if(d.worker_id){const {data:p,error:e}=await db.from('profiles').select('site,role').eq('id',d.worker_id).single();if(e||p?.site!==d.site||p?.role!=='worker')return reply({error:'Documento non accessibile.'},403);}
    if(d.recipient_person_key){const {data:r,error:e}=await db.from('hour_budget_registry').select('account_id').eq('person_key',d.recipient_person_key).single();if(e||r?.account_id===user.id)return reply({error:'Documento non accessibile.'},403);}
+   if(body.action==='open-file'){
+    const archived=await fetch(Deno.env.get('SUPABASE_URL')+'/functions/v1/drive-archive',{
+     method:'POST',signal:AbortSignal.timeout(25000),
+     headers:{'Authorization':'Bearer '+Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),'Content-Type':'application/json'},
+     body:JSON.stringify({action:'read-archived-internal',document_id:body.document_id})
+    }).catch(()=>null);
+    const fileHeaders={...cors,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':'sandbox'};
+    if(archived?.ok)return new Response(archived.body,{headers:{...fileHeaders,'Content-Type':archived.headers.get('Content-Type')||'application/octet-stream'}});
+    const {data:file,error:downloadError}=await db.storage.from('private-documents').download(d.file_path);
+    if(downloadError||!file)return reply({error:'Allegato temporaneamente non disponibile.'},503);
+    const mime=['application/pdf','image/jpeg','image/png','image/webp'].includes(file.type)?file.type:'application/octet-stream';
+    return new Response(file,{headers:{...fileHeaders,'Content-Type':mime}});
+   }
    const {data:url,error:urlError}=await db.storage.from('private-documents').createSignedUrl(d.file_path,90);
    if(urlError)throw urlError;
    return reply({url:url.signedUrl});

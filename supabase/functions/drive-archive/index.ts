@@ -75,6 +75,43 @@ async function folder(access:string,key:string,name:string,parent?:string){
  return row.google_id;
 }
 const types:Record<string,string>={ferie:"Richieste ferie",rol:"Richieste ROL",legge104:"Legge 104",malattia:"Comunicazioni malattia",congedo_parentale:"Congedo parentale"};
+async function cleanupSource(connection:any,documentId?:string){
+ const cutoff=new Date(Date.now()-600000).toISOString();
+ const candidates=db.from("drive_archive_jobs").select("document_id,google_file_id,sha256")
+  .eq("status","archived").is("source_removed_at",null)
+  .not("google_file_id","is",null).not("sha256","is",null)
+  .or("source_cleanup_attempted_at.is.null,source_cleanup_attempted_at.lt."+cutoff)
+  .order("source_cleanup_attempted_at",{ascending:true,nullsFirst:true}).order("created_at");
+ if(documentId)candidates.eq("document_id",documentId);
+ const job=must(await candidates
+  .limit(1).maybeSingle()) as any;
+ if(!job)return {processed:0};
+ const claimed=must(await db.from("drive_archive_jobs").update({source_cleanup_attempted_at:new Date().toISOString()})
+  .eq("document_id",job.document_id).eq("status","archived").is("source_removed_at",null)
+  .or("source_cleanup_attempted_at.is.null,source_cleanup_attempted_at.lt."+cutoff)
+  .select("document_id").maybeSingle());
+ if(!claimed)return {processed:0};
+ try{
+  const doc=must(await db.from("documents").select("file_path").eq("id",job.document_id).single()) as any;
+  const storage=db.storage.from("private-documents");
+  const original=await storage.download(doc.file_path);
+  if(original.error||!original.data)throw new Error("Source unavailable");
+  const bytes=await original.data.arrayBuffer();
+  if(bytes.byteLength>12582912||await digest(bytes)!==job.sha256)throw new Error("Source hash mismatch");
+  const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
+  const meta=await metadata(access,job.google_file_id);
+  if(!meta||meta.appProperties?.documentId!==job.document_id||meta.appProperties?.sha256!==job.sha256||Number(meta.size)!==bytes.byteLength)throw new Error("Archive metadata mismatch");
+  const copy=await request("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(job.google_file_id)+"?alt=media",{headers:{Authorization:"Bearer "+access}});
+  if(!copy.ok||await digest(await copy.arrayBuffer())!==job.sha256)throw new Error("Archive readback failed");
+  const removed=must(await storage.remove([doc.file_path]));
+  if(removed?.length!==1)throw new Error("Source removal unconfirmed");
+  must(await db.from("drive_archive_jobs").update({source_removed_at:new Date().toISOString()}).eq("document_id",job.document_id));
+  return {processed:0,source_removed:true};
+ }catch(e){
+  console.warn("Drive source cleanup:",e instanceof Error?e.message:"unknown error");
+  return {processed:0,source_removed:false};
+ }
+}
 async function worker(){
  if(!CLIENT||!SECRET)return {processed:0,configured:false,reason:"Credenziali OAuth mancanti"};
  const connection=must(await db.from("drive_credentials").select("*").eq("singleton",true).maybeSingle()) as any;
@@ -83,7 +120,7 @@ async function worker(){
  if(!owner.active||owner.role!=="admin")throw new Error("Drive administrator disabled");
  if(!CLIENT||!SECRET)return {processed:0,reason:"Credenziali OAuth mancanti"};
  const claim=must(await db.rpc("drive_claim_job")) as any;
- if(!claim)return {processed:0};
+ if(!claim)return await cleanupSource(connection);
  const {job,lease}=claim;
  try{
   const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
@@ -120,22 +157,26 @@ async function worker(){
   const read=await request("https://www.googleapis.com/drive/v3/files/"+id+"?alt=media",{headers:{Authorization:"Bearer "+access}});
   if(!read.ok||await digest(await read.arrayBuffer())!==hash)throw new Error("Archive readback failed");
   must(await db.rpc("drive_finish_job",{p_lease:lease,p_document:d.id,p_hash:hash}));
-  return {processed:1,archived:true};
+  const cleanup=await cleanupSource(connection,d.id).catch(()=>({source_removed:false}));
+  return {...cleanup,processed:1,archived:true};
  }catch(e){
   const message=e instanceof Error?e.message:"Archive failed";
   must(await db.rpc("drive_finish_job",{p_lease:lease,p_document:job.document_id,p_error:message}));
   return {processed:1,archived:false,error:message};
  }
 }
-async function readArchived(req:Request,documentId:unknown){
+async function readArchived(req:Request,documentId:unknown,internal=false){
  if(typeof documentId!=="string"||!/^[0-9a-f-]{36}$/i.test(documentId))return json({error:"Documento non valido"},400);
+ if(internal&&req.headers.get("Authorization")!=="Bearer "+KEY)return json({error:"Unauthorized"},401);
+ if(!internal){
  const jwt=(req.headers.get("Authorization")||"").replace(/^Bearer /i,"");
  const {data:auth,error}=await db.auth.getUser(jwt);
  if(error||!auth.user)return json({error:"Accedi nuovamente"},401);
  const scoped=createClient(SUPABASE_ENDPOINT,Deno.env.get("SUPABASE_ANON_KEY")!,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:"Bearer "+jwt}}});
  const {data:doc,error:denied}=await scoped.from("documents").select("id").eq("id",documentId).maybeSingle();
  if(denied||!doc)return json({error:"Documento non accessibile"},404);
- const archived=must(await db.from("drive_archive_jobs").select("google_file_id,sha256").eq("document_id",doc.id).eq("status","archived").maybeSingle()) as any;
+ }
+ const archived=must(await db.from("drive_archive_jobs").select("google_file_id,sha256").eq("document_id",documentId).eq("status","archived").maybeSingle()) as any;
  if(!archived?.google_file_id||!archived.sha256)return json({error:"Copia Drive non disponibile"},404);
  const connection=must(await db.from("drive_credentials").select("refresh_token").eq("singleton",true).single()) as any;
  const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
@@ -174,6 +215,7 @@ Deno.serve(async(req:Request)=>{
   }
   const {action,document_id}=await req.json();
   if(action==="read-archived")return await readArchived(req,document_id);
+  if(action==="read-archived-internal")return await readArchived(req,document_id,true);
   const user=await admin(req);
   if(action==="status"){
    const c=must(await db.from("drive_credentials").select("connected_at,root_id").eq("singleton",true).maybeSingle());
