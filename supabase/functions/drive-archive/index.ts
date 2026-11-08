@@ -54,7 +54,7 @@ async function api(access:string,path:string,init:RequestInit={}){
 }
 async function allocated(access:string){return (await api(access,"files/generateIds?count=1&space=drive&type=files")).ids[0];}
 async function metadata(access:string,id:string){
- const r=await request("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(id)+"?fields=id,trashed,size,appProperties,parents,mimeType",{headers:{Authorization:"Bearer "+access}});
+ const r=await request("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(id)+"?fields=id,name,trashed,size,appProperties,parents,mimeType",{headers:{Authorization:"Bearer "+access}});
  if(r.status===404)return null;
  if(!r.ok)throw new Error("Drive metadata HTTP "+r.status);
  const m=await r.json();if(m.trashed)throw new Error("Drive object is in Trash");return m;
@@ -130,23 +130,9 @@ async function cleanupSource(connection:any,documentId?:string){
   return {processed:0,source_removed:false};
  }
 }
-async function worker(){
- if(!CLIENT||!SECRET)return {processed:0,configured:false,reason:"Credenziali OAuth mancanti"};
- const connection=must(await db.from("drive_credentials").select("*").eq("singleton",true).maybeSingle()) as any;
- if(!connection)return {processed:0,reason:"Google non collegato"};
- const owner=must(await db.from("profiles").select("active,role").eq("id",connection.admin_id).single()) as any;
- if(!owner.active||owner.role!=="admin")throw new Error("Drive administrator disabled");
- if(!CLIENT||!SECRET)return {processed:0,reason:"Credenziali OAuth mancanti"};
- const claim=must(await db.rpc("drive_claim_job")) as any;
- if(!claim)return await cleanupSource(connection);
- const {job,lease}=claim;
- try{
-  const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
-  const d=must(await db.from("documents").select("*").eq("id",job.document_id).single()) as any;
-  // Stable worker UUID is authoritative; changes to the displayed name cannot create new folders.
+async function archiveDestination(access:string,d:any){
   const p=must(await db.rpc("drive_recipient_identity",{document:d.id})) as any;
   const root=await folder(access,"root","Documenti lavoratori - Ferie Facili TEST");
-  if(connection.root_id!==root)must(await db.from("drive_credentials").update({root_id:root}).eq("singleton",true));
   let parent=root;
   const kind=documentNames[d.category];
   if(!kind)throw new Error("Unsupported document category");
@@ -155,6 +141,76 @@ async function worker(){
   const keys=[d.site,p.key,year,"category:"+kind.folder];
   let path="root";
   for(let i=0;i<keys.length;i++){path+="/"+keys[i];parent=await folder(access,path,names[i],parent);}
+ return {root,parent,kind};
+}
+async function moveArchivedFile(access:string,id:string,d:any,hash:string,parent:string,kind:{label:string},variant?:string){
+ const m=await metadata(access,id);
+ if(!m||!hash||m.appProperties?.documentId!==d.id||m.appProperties?.sha256!==hash||(variant&&m.appProperties?.variant!==variant))throw new Error("Drive layout identity mismatch");
+ const named=variant?{...d,file_name:m.name||""}:d;
+ let name=archiveFilename(named,kind.label,m.mimeType);
+ if(variant)name=name.replace(/(\.[a-z0-9]{1,8})?$/i,(_,ext)=>" · Scansione"+(ext||""));
+ const oldParents=(m.parents||[]).filter((value:string)=>value!==parent);
+ if(m.name===name&&m.parents?.includes(parent)&&!oldParents.length)return;
+ const query=new URLSearchParams();
+ if(!m.parents?.includes(parent))query.set("addParents",parent);
+ if(oldParents.length)query.set("removeParents",oldParents.join(","));
+ const changed=await api(access,"files/"+encodeURIComponent(id)+"?"+query,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+ const verified=await metadata(access,id);
+ if(changed.id!==id||verified?.id!==id||verified.name!==name||!verified.parents?.includes(parent)||verified.appProperties?.sha256!==hash)throw new Error("Drive layout verification failed");
+}
+async function migrateArchivedLayout(connection:any){
+ const now=new Date().toISOString(),lease=crypto.randomUUID();
+ const acquired=must(await db.from("drive_runtime").update({lease_id:lease,lease_until:new Date(Date.now()+600000).toISOString()})
+  .eq("singleton",true).or("lease_until.is.null,lease_until.lt."+now).select("singleton").maybeSingle());
+ if(!acquired)return 0;
+ try{
+  const cutoff=new Date(Date.now()-600000).toISOString();
+  const jobs=must(await db.from("drive_archive_jobs").select("document_id,google_file_id,sha256")
+   .eq("status","archived").is("layout_migrated_at",null)
+   .or("layout_attempted_at.is.null,layout_attempted_at.lt."+cutoff)
+   .order("layout_attempted_at",{ascending:true,nullsFirst:true}).order("created_at").limit(3)) as any[];
+  if(!jobs.length)return 0;
+  const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
+  let moved=0;
+  for(const job of jobs){
+   must(await db.from("drive_archive_jobs").update({layout_attempted_at:now}).eq("document_id",job.document_id));
+   try{
+    const d=must(await db.from("documents").select("*").eq("id",job.document_id).single()) as any;
+    const {parent,kind}=await archiveDestination(access,d);
+    const scans=[];
+    for(const [table,variant] of [["test_monthly_closures","monthly_scan"],["document_scan_archive_jobs","document_scan"]]){
+     const scan=must(await db.from(table).select("google_scan_id,scan_hash,status").eq("document_id",d.id).not("google_scan_id","is",null).maybeSingle()) as any;
+     if(scan&&scan.status!=="done")throw new Error("Scan archive still in progress");
+     if(scan)scans.push({scan,variant});
+    }
+    await moveArchivedFile(access,job.google_file_id,d,job.sha256,parent,kind);
+    for(const {scan,variant} of scans)await moveArchivedFile(access,scan.google_scan_id,d,scan.scan_hash,parent,kind,variant);
+    must(await db.from("drive_archive_jobs").update({layout_migrated_at:new Date().toISOString()}).eq("document_id",d.id));
+    moved++;
+   }catch(e){console.warn("Drive layout migration:",e instanceof Error?e.message:"unknown error");}
+  }
+  return moved;
+ }finally{must(await db.from("drive_runtime").update({lease_until:null}).eq("singleton",true).eq("lease_id",lease));}
+}
+async function worker(){
+ if(!CLIENT||!SECRET)return {processed:0,configured:false,reason:"Credenziali OAuth mancanti"};
+ const connection=must(await db.from("drive_credentials").select("*").eq("singleton",true).maybeSingle()) as any;
+ if(!connection)return {processed:0,reason:"Google non collegato"};
+ const owner=must(await db.from("profiles").select("active,role").eq("id",connection.admin_id).single()) as any;
+ if(!owner.active||owner.role!=="admin")throw new Error("Drive administrator disabled");
+ if(!CLIENT||!SECRET)return {processed:0,reason:"Credenziali OAuth mancanti"};
+ const claim=must(await db.rpc("drive_claim_job")) as any;
+ if(!claim){
+  const layout_migrated=await migrateArchivedLayout(connection).catch(e=>{console.warn("Drive layout migration:",e instanceof Error?e.message:"unknown error");return 0;});
+  return {...await cleanupSource(connection),layout_migrated};
+ }
+ const {job,lease}=claim;
+ try{
+  const access=(await token({refresh_token:connection.refresh_token,grant_type:"refresh_token"})).access_token;
+  const d=must(await db.from("documents").select("*").eq("id",job.document_id).single()) as any;
+  // Stable worker UUID is authoritative; changes to the displayed name cannot create new folders.
+  const {root,parent,kind}=await archiveDestination(access,d);
+  if(connection.root_id!==root)must(await db.from("drive_credentials").update({root_id:root}).eq("singleton",true));
   const stored=await db.storage.from("private-documents").download(d.file_path);
   if(stored.error||!stored.data)throw new Error("Source document unavailable");
   const bytes=await stored.data.arrayBuffer();
