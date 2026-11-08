@@ -37,7 +37,7 @@ const statusLabel={pending:'In verifica',verified:'Documento verificato',rejecte
 const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const monthNow=()=>isoLocalDate(new Date()).slice(0,7);
 $('month').value=monthNow();$('adminMonth').value=monthNow();
-$('weekDate').value=currentReminderFriday();$('workerWeek').value=weeklyEnd(false);
+$('workerWeek').value=weeklyEnd(false);
 $('workerWeekChoice').onchange=()=>{$('workerWeek').value=$('workerWeekChoice').value;};
 function currentReminderFriday(now=new Date()){
  const [year,month,day]=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(now).split('-').map(Number);
@@ -474,13 +474,17 @@ function reminderWeekRange(value){
  const first=sameYear&&start.getUTCMonth()===end.getUTCMonth()?start.getUTCDate():format(start,{day:'numeric',month:'long',...(!sameYear?{year:'numeric'}:{})});
  return 'dal '+first+' al '+format(end,{day:'numeric',month:'long',year:'numeric'});
 }
-function showReminderWeek(){
- const range=reminderWeekRange($('weekDate').value);
- $('reminderWeekRange').textContent=range?'Settimana di riferimento '+range:'';
+const reminderFriday=new Date(currentReminderFriday()+'T12:00:00Z');
+for(let i=0;i<104;i++){
+ const value=reminderFriday.toISOString().slice(0,10);
+ $('weekDate').add(new Option(reminderWeekRange(value),value));
+ reminderFriday.setUTCDate(reminderFriday.getUTCDate()-7);
 }
-$('weekDate').addEventListener('change',showReminderWeek);
-showReminderWeek();
-$('findMissing').onclick=async()=>{const week=$('weekDate').value,site=$('adminSite').value;if(!week){msg('Seleziona un venerdì.');return}if(new Date(week+'T12:00:00').getDay()!==5){msg('Seleziona una data che sia venerdì.');return}const first=new Date(week+'T12:00:00');first.setDate(first.getDate()-6);const start=isoLocalDate(first);const {data,error}=await sb.from('documents').select('worker_id,week_ending,created_at,stage,review_status').in('stage',['weekly','replacement']).eq('week_ending',week);if(error){err(error);return}const delivered=new Set((data||[]).filter(x=>x.review_status!=='rejected').map(x=>x.worker_id));missing=people.filter(p=>p.active&&p.role==='worker'&&p.site&&(!site||p.site===site)&&!delivered.has(p.id));const area=$('missingList');area.replaceChildren();if(!missing.length){area.textContent='Tutti hanno consegnato per la settimana selezionata.';return}for(const p of missing){const row=node('label',null,'doc-row'),cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.style.width='auto';cb.dataset.uid=p.id;row.append(cb,node('span',`${p.full_name} · ${p.site}`));area.append(row)}msg(`${missing.length} lavoratori senza consegna per il venerdì selezionato.`)};
+$('weekDate').addEventListener('change',()=>{
+ $('missingList').replaceChildren();
+ $('whatsappReminderLinks').replaceChildren();
+});
+$('findMissing').onclick=async()=>{const week=$('weekDate').value,site=$('adminSite').value;if(!week){msg('Seleziona una settimana.');return}if(new Date(week+'T12:00:00').getDay()!==5){msg('Seleziona una settimana valida.');return}const first=new Date(week+'T12:00:00');first.setDate(first.getDate()-6);const start=isoLocalDate(first);const {data,error}=await sb.from('documents').select('worker_id,week_ending,created_at,stage,review_status').in('stage',['weekly','replacement']).eq('week_ending',week);if(week!==$('weekDate').value)return;if(error){err(error);return}const delivered=new Set((data||[]).filter(x=>x.review_status!=='rejected').map(x=>x.worker_id));missing=people.filter(p=>p.active&&p.role==='worker'&&p.site&&(!site||p.site===site)&&!delivered.has(p.id));const area=$('missingList');area.replaceChildren();if(!missing.length){area.textContent='Tutti hanno consegnato per la settimana selezionata.';return}for(const p of missing){const row=node('label',null,'doc-row'),cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.style.width='auto';cb.dataset.uid=p.id;row.append(cb,node('span',`${p.full_name} · ${p.site}`));area.append(row)}msg(`${missing.length} lavoratori senza consegna per la settimana selezionata.`)};
 function selectedMissing(){return missing.filter(p=>document.querySelector(`#missingList input[data-uid="${p.id}"]`)?.checked)}
 $('sendReminders').onclick=async()=>{const sel=selectedMissing(),week=$('weekDate').value;if(!sel.length){msg('Nessun lavoratore selezionato.');return}if(!confirm(`Inviare ${sel.length} solleciti nell'app?`))return;let sent=0,duplicates=0;for(const p of sel){const r=await addNotification(p.id,'reminder',`Non risulta consegnato il foglio presenze della settimana ${reminderWeekRange(week)}. Carica il foglio cartaceo compilato e firmato.`,week);if(r.error){if(r.error.code==='23505')duplicates++;else err(r.error)}else sent++}msg(`${sent} notifiche nell'app registrate; ${duplicates} solleciti già presenti.`)};
 $('whatsappReminders').onclick=()=>{
