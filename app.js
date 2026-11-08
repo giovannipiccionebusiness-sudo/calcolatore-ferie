@@ -459,7 +459,7 @@ function renderWorkerWeekChoices(){
  }
  if(selected&&!dates.includes(selected)&&reminderWeekRange(weeklyKey(selected)))dates.push(selected);
  choice.replaceChildren(...dates.map(value=>new Option(reminderWeekRange(weeklyKey(value)),value)));
- choice.value=selected||end;
+ choice.value=dates.includes(selected)?selected:end;
  $('workerWeek').value=choice.value;
 }
 function reminderWeekRange(value){
