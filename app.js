@@ -4,7 +4,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=112';
-import './app-version.js?v=114';
+import './app-version.js?v=115';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=100';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -497,7 +497,11 @@ function compactList(area,label,{collapsible=true,initialOpen=false,replaceHeadi
    if(state.limit>5)controls.append(button('Mostra meno',()=>{state.limit=5;update();area.scrollIntoView({behavior:'smooth',block:'nearest'});},true));
   }
  };
- if(controlsAtTop)area.before(controls);else wrapper.append(controls);
+ if(controlsAtTop){
+  controls.style.display='flex';
+  controls.style.flexWrap='wrap';
+  area.before(controls);
+ }else wrapper.append(controls);
  update();
 }
 
