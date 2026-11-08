@@ -5,8 +5,8 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=119';
-import './app-version.js?v=119';
-import {createColleagueUpload} from './colleague-upload.js?v=69';
+import './app-version.js?v=120';
+import {createColleagueUpload} from './colleague-upload.js?v=120';
 import {createHourBudget} from './hour-budget-ui.js?v=119';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
@@ -37,7 +37,9 @@ const statusLabel={pending:'In verifica',verified:'Documento verificato',rejecte
 const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const monthNow=()=>isoLocalDate(new Date()).slice(0,7);
 $('month').value=monthNow();$('adminMonth').value=monthNow();
-const today=new Date(), friday=new Date(today);friday.setDate(today.getDate()+((5-today.getDay()+7)%7));$('weekDate').value=isoLocalDate(friday);$('workerWeek').value=$('weekDate').value;
+import {previousFriday} from './weekly-reference.js?v=120';
+const today=new Date(), friday=new Date(today);friday.setDate(today.getDate()+((5-today.getDay()+7)%7));$('weekDate').value=isoLocalDate(friday);$('workerWeek').value=previousFriday();
+$('workerWeek').max=isoLocalDate(today);
 function msg(t){$('appMsg').textContent=t}
 function err(e){
  const text=e?.message||String(e);
@@ -232,15 +234,21 @@ async function restoreUploadState(){
  if(pendingDraft){showDocuments();renderUploadRecovery();}else await multiPage.restore(session.user.id);
 }
 const uploadButtons=['updateSheet','replaceSheet','finalSheet','uploadOther'];
-function validateUploadSelection(a){
+async function validateUploadSelection(a){
  if(!profile?.active||profile.role!=='worker')throw new Error('Accedi con un account lavoratore abilitato.');
- const month=$('month').value;
- if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Seleziona il mese di riferimento.');
  const weekly=['weekly','replacement'].includes(a),week=weekly?$('workerWeek').value:null;
- if(weekly&&(!week||!/^\d{4}-\d{2}-\d{2}$/.test(week)||new Date(week+'T12:00:00').getDay()!==5||week.slice(0,7)!==month)){
-  $('workerWeek').focus();throw new Error('Seleziona il venerdì della settimana, nello stesso mese del foglio.');
+ const month=weekly?week.slice(0,7):$('month').value;
+ if(weekly&&(!week||!/^\d{4}-\d{2}-\d{2}$/.test(week)||new Date(week+'T12:00:00').getDay()!==5||week>isoLocalDate(new Date()))){
+  $('workerWeek').focus();throw new Error('Seleziona il venerdì di riferimento. Puoi scegliere anche oggi se è venerdì.');
  }
- const recent=docs.filter(d=>d.category==='presenze'&&['weekly','replacement'].includes(d.stage)&&d.week_ending===week).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+ if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Seleziona il mese di riferimento.');
+ let matching=docs;
+ if(a==='replacement'&&month!==$('month').value){
+  const {data,error}=await sb.from('documents').select('id,category,stage,week_ending,created_at').eq('worker_id',session.user.id).eq('month',month);
+  if(error)throw error;
+  matching=data||[];
+ }
+ const recent=matching.filter(d=>d.category==='presenze'&&['weekly','replacement'].includes(d.stage)&&d.week_ending===week).sort((a,b)=>b.created_at.localeCompare(a.created_at));
  if(a==='replacement'&&!recent.length)throw new Error('Nessun foglio per questa settimana da sostituire. Usa Aggiorna foglio presenze.');
  return Object.freeze({stage:a,month,week,category:a==='request'?$('docType').value:'presenze',replaces:a==='replacement'?recent[0].id:null,note:a==='request'?$('docNote').value.trim():'',worker_id:session.user.id,site:profile.site});
 }
@@ -248,7 +256,7 @@ async function pick(a){
  if(uploading)return;
  if(pendingDraft){showDocuments();renderUploadRecovery();msg('Riprendi o elimina la foto già pronta prima di sceglierne un’altra.');return;}
  try{
-  const selected=validateUploadSelection(a);revealWorkerTarget(a==='request'?$('docType'):$('updateSheet'));
+  const selected=await validateUploadSelection(a);revealWorkerTarget(a==='request'?$('docType'):$('updateSheet'));
   if(a==='final'&&selected.month>=monthNow()&&!await appConfirm('Il mese selezionato è ancora in corso. Il foglio definitivo deve comprendere tutti i giorni del mese. Continuare?'))return;
   if(a==='final'&&!await appConfirm('Confermi che il foglio è completo per TUTTO il mese e firmato a mano?'))return;
   if(selected.category==='congedo_parentale'){clearCameraRetry();clearCameraSelection();showDocuments();multiPage.open(selected).catch(err);return;}
