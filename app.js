@@ -4,7 +4,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=112';
-import './app-version.js?v=113';
+import './app-version.js?v=114';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=100';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -461,7 +461,7 @@ async function refreshDrive(){
   }
   if(!result.jobs?.length)list.textContent='Nessun documento ancora presente nell’archivio.';
   if((result.jobs||[]).length===200)list.append(node('small','Visualizzati i 200 caricamenti più recenti.'));
-  compactList(list,'Documenti archiviati su Drive',{replaceHeading:false});
+  compactList(list,'Documenti Google Drive',{replaceHeading:false,initialOpen:true,controlsAtTop:true});
  }catch(e){summary.textContent='Impossibile aggiornare l’archivio: '+e.message;}
 }
 const refreshAdminWithUsers=refreshAdmin;
@@ -469,7 +469,7 @@ refreshAdmin=async function(){await refreshAdminWithUsers();await refreshDrive()
 
 
 const compactListState=new Map();
-function compactList(area,label,{collapsible=true,initialOpen=false,replaceHeading=true}={}){
+function compactList(area,label,{collapsible=true,initialOpen=false,replaceHeading=true,controlsAtTop=false}={}){
  const rows=Array.from(area.children).filter(el=>el.classList.contains('doc-row'));
  let state=compactListState.get(label);
  if(!state){state={open:initialOpen,limit:5};compactListState.set(label,state);}
@@ -497,7 +497,8 @@ function compactList(area,label,{collapsible=true,initialOpen=false,replaceHeadi
    if(state.limit>5)controls.append(button('Mostra meno',()=>{state.limit=5;update();area.scrollIntoView({behavior:'smooth',block:'nearest'});},true));
   }
  };
- wrapper.append(controls);update();
+ if(controlsAtTop)area.before(controls);else wrapper.append(controls);
+ update();
 }
 
 const refreshAdminCompact=refreshAdmin;
