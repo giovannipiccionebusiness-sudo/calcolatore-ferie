@@ -51,7 +51,7 @@ async function loadWeeklyEnd(){
  const {data,error}=await sb.from('worker_shifts').select('schedule').eq('worker_id',owner).lte('valid_from',day).order('valid_from',{ascending:false}).limit(1).maybeSingle();
  if(error)throw error;
  if(session?.user?.id!==owner)return;
- saturdayWorker=!!data?.schedule?.[5]?.length;
+ saturdayWorker=profile?.weekly_contract_saturday??!!data?.schedule?.[5]?.length;
  $('workerWeek').value=weeklyEnd(saturdayWorker);
 }
 function weeklyKey(date){
