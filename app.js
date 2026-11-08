@@ -450,7 +450,7 @@ $('whatsappReminders').onclick=()=>{
   let phone=String(person.phone||'').replace(/\D/g,'').replace(/^00/,'');
   if(/^3\d{8,9}$/.test(phone))phone='39'+phone;
   if(!/^[1-9]\d{7,14}$/.test(phone)){links.append(node('p','Numero WhatsApp mancante o non valido per '+person.full_name+'.'));continue;}
-  const message='👋 Ciao '+person.full_name+'!\n\n📋 Ti ricordo di caricare il foglio presenze settimanale compilato e firmato.\n📅 Settimana di riferimento del '+week+'\n📲 Caricalo su Lavoro Facile.\n\nGrazie!';
+  const message='👋 Ciao '+person.full_name+'!\n\n📋 Ti ricordo di caricare il foglio presenze settimanale compilato e firmato.\n📅 Settimana di riferimento del '+week+'\n📲 Caricalo su Lavoro Facile:\nhttps://shorturl.at/GlqTY\n\nGrazie!';
   const link=node('a','💬 Apri WhatsApp per '+person.full_name,'doc-button outline');
   link.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message);
   links.append(link);
