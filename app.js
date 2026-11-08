@@ -4,7 +4,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=112';
-import './app-version.js?v=112';
+import './app-version.js?v=113';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=100';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -436,9 +436,9 @@ async function refreshDrive(){
  const summary=node('p','Verifica del collegamento…'),controls=node('div',null,'doc-toolbar'),list=node('div');drivePanel.append(summary,controls,list);
  try{
   const result=await driveCall('status');
-  summary.textContent=!result.configured?'Configurazione OAuth da completare nel backend.':!result.connection?'Google Drive non ancora collegato.':'Google Drive collegato. Controlla lo stato di ogni documento.';
-  if(!result.connection){
-   controls.append(button('Collega Google Drive',async()=>{
+  summary.textContent=!result.configured?'Configurazione OAuth da completare nel backend.':!result.connection?'Google Drive non ancora collegato.':'Account Google registrato. Se l’archiviazione si blocca, usa Ricollega Google Drive con lo stesso account.';
+  if(result.configured){
+   controls.append(button(result.connection?'Ricollega Google Drive':'Collega Google Drive',async()=>{
     try{const r=await driveCall('connect');location.assign(r.url)}catch(e){err(e)}
    }));
   }
