@@ -5,7 +5,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=119';
-import './app-version.js?v=119';
+import './app-version.js?v=121';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=119';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -37,7 +37,30 @@ const statusLabel={pending:'In verifica',verified:'Documento verificato',rejecte
 const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const monthNow=()=>isoLocalDate(new Date()).slice(0,7);
 $('month').value=monthNow();$('adminMonth').value=monthNow();
-const today=new Date(), friday=new Date(today);friday.setDate(today.getDate()+((5-today.getDay()+7)%7));$('weekDate').value=isoLocalDate(friday);$('workerWeek').value=$('weekDate').value;
+const today=new Date(), friday=new Date(today);friday.setDate(today.getDate()+((5-today.getDay()+7)%7));$('weekDate').value=isoLocalDate(friday);$('workerWeek').value=weeklyEnd(false);
+let saturdayWorker=false;
+function weeklyEnd(saturday,now=new Date()){
+ const [y,m,d]=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(now).split('-').map(Number);
+ const day=new Date(Date.UTC(y,m-1,d,12));
+ day.setUTCDate(day.getUTCDate()-(day.getUTCDay()-(saturday?6:5)+7)%7);
+ return day.toISOString().slice(0,10);
+}
+async function loadWeeklyEnd(){
+ const owner=session?.user?.id;
+ const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date());
+ const {data,error}=await sb.from('worker_shifts').select('schedule').eq('worker_id',owner).lte('valid_from',day).order('valid_from',{ascending:false}).limit(1).maybeSingle();
+ if(error)throw error;
+ if(session?.user?.id!==owner)return;
+ saturdayWorker=profile?.weekly_contract_saturday??!!data?.schedule?.[5]?.length;
+ $('workerWeek').value=weeklyEnd(saturdayWorker);
+}
+function weeklyKey(date){
+ if(!saturdayWorker||!date)return date;
+ const day=new Date(date+'T12:00:00Z');
+ if(day.getUTCDay()!==6)return '';
+ day.setUTCDate(day.getUTCDate()-1);
+ return day.toISOString().slice(0,10);
+}
 function msg(t){$('appMsg').textContent=t}
 function err(e){
  const text=e?.message||String(e);
@@ -97,7 +120,7 @@ async function boot(){if(!configured){$('setupAlert').textContent='Configurazion
  authClient.auth.onAuthStateChange((event,s)=>{session=s;passwordRecovery.onAuth(event,s);if(event==='SIGNED_OUT'){profile=null;showLogged(false);msg('Accesso terminato.')}});
  const {data,error}=await authClient.auth.getSession();if(error)throw error;session=data.session;await reloadAccount();
 }
-async function reloadAccount(){profile=null;if(session){const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();if(error){err(error);showLogged(false);return}profile=data;$('accountName').textContent=profile.full_name||session.user.email;$('accountInfo').textContent=profile.active?(profile.role==='admin'?'Amministratore':accountSiteLabel(profile)):'In attesa di abilitazione';}showLogged(!!session);if(!session){msg('Accedi o richiedi la registrazione.');return}if(!profile.active){msg('Registrazione ricevuta. L’amministratore deve abilitare il tuo account.');return}msg('');if(profile.role==='admin')await refreshAdmin();else {await restoreUploadState();}}
+async function reloadAccount(){profile=null;saturdayWorker=false;if(session){const {data,error}=await sb.from('profiles').select('*').eq('id',session.user.id).single();if(error){err(error);showLogged(false);return}profile=data;if(profile.active&&profile.role==='worker')await loadWeeklyEnd().catch(err);$('accountName').textContent=profile.full_name||session.user.email;$('accountInfo').textContent=profile.active?(profile.role==='admin'?'Amministratore':accountSiteLabel(profile)):'In attesa di abilitazione';}showLogged(!!session);if(!session){msg('Accedi o richiedi la registrazione.');return}if(!profile.active){msg('Registrazione ricevuta. L’amministratore deve abilitare il tuo account.');return}msg('');if(profile.role==='admin')await refreshAdmin();else {await restoreUploadState();}}
 $('loginBtn').onclick=async()=>{
  const b=$('loginBtn');if(!sb){msg('Connessione in preparazione. Riprova tra qualche secondo.');return}
  const email=$('email').value.trim(),password=$('password').value;
@@ -220,7 +243,7 @@ async function restoreUploadState(){
  const saved=readCameraSelection(session.user.id);
  pendingDraft=await readUploadDraft(session.user.id).catch(()=>null);
  if(saved){
-  $('month').value=saved.month;$('workerWeek').value=saved.week||'';
+  $('month').value=saved.month;$('workerWeek').value=saved.week&&saturdayWorker?new Date(Date.parse(saved.week+'T12:00:00Z')+86400000).toISOString().slice(0,10):saved.week||'';
   if(saved.stage==='request'){$('docType').value=saved.category;$('docNote').value=saved.note||'';}
  }
  if(pendingDraft)$('month').value=pendingDraft.payload.month;
@@ -232,15 +255,21 @@ async function restoreUploadState(){
  if(pendingDraft){showDocuments();renderUploadRecovery();}else await multiPage.restore(session.user.id);
 }
 const uploadButtons=['updateSheet','replaceSheet','finalSheet','uploadOther'];
-function validateUploadSelection(a){
+async function validateUploadSelection(a){
  if(!profile?.active||profile.role!=='worker')throw new Error('Accedi con un account lavoratore abilitato.');
- const month=$('month').value;
- if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Seleziona il mese di riferimento.');
- const weekly=['weekly','replacement'].includes(a),week=weekly?$('workerWeek').value:null;
- if(weekly&&(!week||!/^\d{4}-\d{2}-\d{2}$/.test(week)||new Date(week+'T12:00:00').getDay()!==5||week.slice(0,7)!==month)){
-  $('workerWeek').focus();throw new Error('Seleziona il venerdì della settimana, nello stesso mese del foglio.');
+ const weekly=['weekly','replacement'].includes(a),date=$('workerWeek').value,week=weekly?weeklyKey(date):null;
+ const month=weekly?week.slice(0,7):$('month').value;
+ if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Seleziona la fine della settimana o il mese di riferimento.');
+ if(weekly&&(!week||!/^\d{4}-\d{2}-\d{2}$/.test(week)||new Date(week+'T12:00:00').getDay()!==5||date>weeklyEnd(saturdayWorker))){
+  $('workerWeek').focus();throw new Error('Seleziona la fine della settimana prevista dal tuo orario.');
  }
- const recent=docs.filter(d=>d.category==='presenze'&&['weekly','replacement'].includes(d.stage)&&d.week_ending===week).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+ let matching=docs;
+ if(a==='replacement'&&month!==$('month').value){
+  const {data,error}=await sb.from('documents').select('id,category,stage,week_ending,created_at').eq('worker_id',session.user.id).eq('month',month);
+  if(error)throw error;
+  matching=data||[];
+ }
+ const recent=matching.filter(d=>d.category==='presenze'&&['weekly','replacement'].includes(d.stage)&&d.week_ending===week).sort((a,b)=>b.created_at.localeCompare(a.created_at));
  if(a==='replacement'&&!recent.length)throw new Error('Nessun foglio per questa settimana da sostituire. Usa Aggiorna foglio presenze.');
  return Object.freeze({stage:a,month,week,category:a==='request'?$('docType').value:'presenze',replaces:a==='replacement'?recent[0].id:null,note:a==='request'?$('docNote').value.trim():'',worker_id:session.user.id,site:profile.site});
 }
@@ -248,7 +277,7 @@ async function pick(a){
  if(uploading)return;
  if(pendingDraft){showDocuments();renderUploadRecovery();msg('Riprendi o elimina la foto già pronta prima di sceglierne un’altra.');return;}
  try{
-  const selected=validateUploadSelection(a);revealWorkerTarget(a==='request'?$('docType'):$('updateSheet'));
+  const selected=await validateUploadSelection(a);revealWorkerTarget(a==='request'?$('docType'):$('updateSheet'));
   if(a==='final'&&selected.month>=monthNow()&&!await appConfirm('Il mese selezionato è ancora in corso. Il foglio definitivo deve comprendere tutti i giorni del mese. Continuare?'))return;
   if(a==='final'&&!await appConfirm('Confermi che il foglio è completo per TUTTO il mese e firmato a mano?'))return;
   if(selected.category==='congedo_parentale'){clearCameraRetry();clearCameraSelection();showDocuments();multiPage.open(selected).catch(err);return;}
@@ -411,7 +440,23 @@ async function authorize(d,status){if(!confirm(status==='approved'?'Autorizzare 
 $('findMissing').onclick=async()=>{const week=$('weekDate').value,site=$('adminSite').value;if(!week){msg('Seleziona un venerdì.');return}if(new Date(week+'T12:00:00').getDay()!==5){msg('Seleziona una data che sia venerdì.');return}const first=new Date(week+'T12:00:00');first.setDate(first.getDate()-6);const start=isoLocalDate(first);const {data,error}=await sb.from('documents').select('worker_id,week_ending,created_at,stage,review_status').in('stage',['weekly','replacement']).eq('week_ending',week);if(error){err(error);return}const delivered=new Set((data||[]).filter(x=>x.review_status!=='rejected').map(x=>x.worker_id));missing=people.filter(p=>p.active&&p.role==='worker'&&p.site&&(!site||p.site===site)&&!delivered.has(p.id));const area=$('missingList');area.replaceChildren();if(!missing.length){area.textContent='Tutti hanno consegnato per la settimana selezionata.';return}for(const p of missing){const row=node('label',null,'doc-row'),cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.style.width='auto';cb.dataset.uid=p.id;row.append(cb,node('span',`${p.full_name} · ${p.site}`));area.append(row)}msg(`${missing.length} lavoratori senza consegna per il venerdì selezionato.`)};
 function selectedMissing(){return missing.filter(p=>document.querySelector(`#missingList input[data-uid="${p.id}"]`)?.checked)}
 $('sendReminders').onclick=async()=>{const sel=selectedMissing(),week=$('weekDate').value;if(!sel.length){msg('Nessun lavoratore selezionato.');return}if(!confirm(`Inviare ${sel.length} solleciti nell'app?`))return;let sent=0,duplicates=0;for(const p of sel){const r=await addNotification(p.id,'reminder',`Non risulta consegnato il foglio presenze della settimana con venerdì ${week}. Carica il foglio cartaceo compilato e firmato.`,week);if(r.error){if(r.error.code==='23505')duplicates++;else err(r.error)}else sent++}msg(`${sent} notifiche nell'app registrate; ${duplicates} solleciti già presenti.`)};
-$('whatsappReminders').onclick=()=>{const sel=selectedMissing();if(!sel.length){msg('Nessun lavoratore selezionato.');return}const without=sel.filter(x=>!x.phone);if(without.length){msg('Numeri WhatsApp mancanti per: '+without.map(x=>x.full_name).join(', ')+'. Inseriscili in Supabase nella tabella profiles, colonna phone.');return}if(!confirm(`Aprire WhatsApp per ${sel.length} lavoratori? Dovrai premere Invia in ogni conversazione.`))return;for(const p of sel){const phone=p.phone.replace(/[^0-9]/g,'');const t=`Buongiorno ${p.full_name}, non risulta ancora caricato il foglio presenze settimanale compilato e firmato. Ti invito a provvedere tramite Lavoro Facile. Grazie.`;window.open(`https://wa.me/${phone}?text=${encodeURIComponent(t)}`,'_blank','noopener,noreferrer')}msg('WhatsApp aperto: l’invio effettivo deve essere confermato manualmente. Il browser potrebbe bloccare più schede.')};
+$('whatsappReminders').onclick=()=>{
+ const selected=selectedMissing();
+ if(!selected.length){msg('Nessun lavoratore selezionato.');return;}
+ const links=$('whatsappReminderLinks');
+ links.replaceChildren();
+ const week=$('weekDate').value.split('-').reverse().join('/');
+ for(const person of selected){
+  let phone=String(person.phone||'').replace(/\D/g,'').replace(/^00/,'');
+  if(/^3\d{8,9}$/.test(phone))phone='39'+phone;
+  if(!/^[1-9]\d{7,14}$/.test(phone)){links.append(node('p','Numero WhatsApp mancante o non valido per '+person.full_name+'.'));continue;}
+  const message='👋 Ciao '+person.full_name+'!\n\n📋 Ti ricordo di caricare il foglio presenze settimanale compilato e firmato.\n📅 Settimana di riferimento del '+week+'\n📲 Caricalo su Lavoro Facile.\n\nGrazie!';
+  const link=node('a','💬 Apri WhatsApp per '+person.full_name,'doc-button outline');
+  link.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message);
+  links.append(link);
+ }
+ links.scrollIntoView({block:'nearest'});
+};
 $('tabDocs').addEventListener('click',()=>{if(profile?.role==='admin')refreshAdmin();else if(profile?.active)refreshWorker()});
 const baseRefreshAdmin=refreshAdmin;
 refreshAdmin=async function(){

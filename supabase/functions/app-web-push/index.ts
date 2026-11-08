@@ -14,7 +14,7 @@ export function notificationText(item:any){
  if(item.kind==='admin_registration')return {title:'Account da abilitare',body:'Un account lavoratore è in attesa di abilitazione. Apri la campanella e consulta “Da gestire”.'};
  if(item.kind==='admin_review')return {title:'Documento da verificare',body:'Hai un documento da verificare. Apri la campanella e consulta “Da gestire”.'};
  if(item.kind==='admin_authorization')return {title:'Richiesta da autorizzare',body:'Hai una richiesta da autorizzare. Apri la campanella e consulta “Da gestire”.'};
- if(item.kind==='weekly')return {title:'Presenze del venerdì',body:'Ti ricordiamo di aggiornare il foglio presenze fino a questa settimana e caricarne una foto leggibile nell’app, usando “Aggiorna foglio presenze”.',month};
+ if(item.kind==='weekly')return {title:'Presenze settimanali',body:'Ti ricordiamo di aggiornare il foglio presenze fino a questa settimana e caricarne una foto leggibile nell’app, usando “Aggiorna foglio presenze”.',month};
  if(item.kind==='monthly')return {title:'Foglio presenze definitivo',body:'Caro collaboratore, ti chiedo di completare il foglio presenze di '+label+' fino a fine mese e di caricarlo, firmato, nell’app con “Invia foglio definitivo”. Ti chiedo inoltre di comunicare tempestivamente al responsabile eventuali modifiche successive. Grazie per la collaborazione.',month};
  if(item.kind==='monthly_request')return {title:'Richiesta del definitivo mensile',body:item.message,month};
  if(item.kind==='custom')return {title:'Messaggio dal responsabile',body:item.message};
@@ -46,11 +46,15 @@ async function stillNeeded(item:any,sub:any){
  if(!p.active||p.role!=='worker')return false;
  if(['colleague_upload','colleague_review','colleague_authorization'].includes(item.kind))return sub.app_scope==='production';
  if(item.kind==='activation'||item.kind==='custom')return true;
- const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date()),month=item.kind==='monthly_request'?item.target_month:local.slice(0,7);
+ const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(new Date());
+ const day=new Date(local+'T12:00:00Z');
+ if(item.kind==='weekly'&&day.getUTCDay()===6)day.setUTCDate(day.getUTCDate()-1);
+ const weeklyKey=day.toISOString().slice(0,10);
+ const month=item.kind==='monthly_request'?item.target_month:item.kind==='weekly'?weeklyKey.slice(0,7):local.slice(0,7);
  if(item.kind==='weekly'&&item.event_key!=='weekly:'+local)return false;
  if(item.kind==='monthly'&&item.event_key!=='monthly:'+month)return false;
  const {data:docs,error:e}=await db.from('documents').select('stage,week_ending').eq('worker_id',sub.user_id).eq('month',month).eq('category','presenze').neq('review_status','rejected');if(e)throw e;
- return !(docs||[]).some(d=>d.stage==='final'||(item.kind==='weekly'&&['weekly','replacement'].includes(d.stage)&&d.week_ending===local));
+ return !(docs||[]).some(d=>d.stage==='final'||(item.kind==='weekly'&&['weekly','replacement'].includes(d.stage)&&d.week_ending===weeklyKey));
 }
 async function send(item:any,row:any){
  const {data:sub}=await db.from('test_push_subscriptions').select('*').eq('id',item.subscription_id).maybeSingle();if(!sub)return 'skipped';
