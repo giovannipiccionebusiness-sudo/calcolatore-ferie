@@ -74,7 +74,25 @@ async function folder(access:string,key:string,name:string,parent?:string){
  if(!m||m.mimeType!=="application/vnd.google-apps.folder"||m.appProperties?.ferieFaciliPath!==key||(parent&&!m.parents?.includes(parent)))throw new Error("Drive folder verification failed");
  return row.google_id;
 }
-const types:Record<string,string>={ferie:"Richieste ferie",rol:"Richieste ROL",legge104:"Legge 104",malattia:"Comunicazioni malattia",congedo_parentale:"Congedo parentale"};
+const documentNames:Record<string,{folder:string;label:string}>={
+ presenze:{folder:"Presenze",label:"Presenze"},
+ ferie:{folder:"Ferie e ROL",label:"Richieste ferie e ROL"},
+ rol:{folder:"Ferie e ROL",label:"Richieste ferie e ROL"},
+ legge104:{folder:"Legge 104",label:"Giorni L104"},
+ malattia:{folder:"Malattia",label:"Malattia"},
+ congedo_parentale:{folder:"Congedo parentale",label:"Congedo parentale"}
+};
+const months=["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+function archiveFilename(d:any,label:string,mime:string){
+ const month=months[Number(d.month.slice(5,7))-1];
+ if(!month)throw new Error("Invalid document month");
+ const ext=d.file_name.match(/\.[a-z0-9]{1,8}$/i)?.[0]||
+  ({ "application/pdf":".pdf","image/jpeg":".jpg","image/png":".png","image/webp":".webp" } as Record<string,string>)[mime]||"";
+ const date=new Intl.DateTimeFormat("it-IT",{timeZone:"Europe/Rome",day:"2-digit",month:"2-digit",year:"numeric"}).format(new Date(d.created_at)).replaceAll("/","-");
+ const detail=d.category==="presenze"?(d.stage==="final"?"":d.stage==="replacement"?" · Sostituzione":" · Settimanale"):d.category==="rol"?" · ROL":d.category==="ferie"?" · Ferie":"";
+ const suffix=d.category==="presenze"&&d.stage==="final"?"":detail+" · "+date+" · "+d.id.slice(0,8);
+ return label+" "+month+" "+d.month.slice(0,4)+suffix+ext;
+}
 async function cleanupSource(connection:any,documentId?:string){
  const cutoff=new Date(Date.now()-600000).toISOString();
  const candidates=db.from("drive_archive_jobs").select("document_id,google_file_id,sha256")
@@ -130,10 +148,10 @@ async function worker(){
   const root=await folder(access,"root","Documenti lavoratori - Ferie Facili TEST");
   if(connection.root_id!==root)must(await db.from("drive_credentials").update({root_id:root}).eq("singleton",true));
   let parent=root;
-  const kind=d.category==="presenze"?(d.stage==="final"?"Presenze definitive":"Presenze settimanali"):types[d.category];
+  const kind=documentNames[d.category];
   if(!kind)throw new Error("Unsupported document category");
-  const names=[({N153:"N153 - Corte d’Appello",N148:"N148 - ENAV",N154:"N154 - Acquedotto Pugliese"} as Record<string,string>)[d.site]||d.site,(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",d.month.slice(0,4),kind,d.month.slice(5,7)];
-  const keys=[d.site,p.key,d.month.slice(0,4),kind,d.month.slice(5,7)];
+  const names=[({N153:"N153 - Corte d’Appello",N148:"N148 - ENAV",N154:"N154 - Acquedotto Pugliese"} as Record<string,string>)[d.site]||d.site,(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",kind.folder];
+  const keys=[d.site,p.key,"category:"+kind.folder];
   let path="root";
   for(let i=0;i<keys.length;i++){path+="/"+keys[i];parent=await folder(access,path,names[i],parent);}
   const stored=await db.storage.from("private-documents").download(d.file_path);
@@ -141,21 +159,29 @@ async function worker(){
   const bytes=await stored.data.arrayBuffer();
   if(bytes.byteLength>12582912)throw new Error("Document too large");
   const hash=await digest(bytes);
+  const name=archiveFilename(d,kind.label,stored.data.type);
   let id=job.google_file_id;
   if(!id){id=await allocated(access);must(await db.from("drive_archive_jobs").update({google_file_id:id}).eq("document_id",d.id));}
   let m=await metadata(access,id);
   if(!m){
    const boundary="ff_"+crypto.randomUUID();
-   const meta={id,name:d.id+"_"+d.file_name.replace(/[\\/\r\n]/g,"_"),parents:[parent],appProperties:{documentId:d.id,sha256:hash,stage:d.stage,replaces:d.replaces||""}};
+   const meta={id,name,parents:[parent],appProperties:{documentId:d.id,sha256:hash,stage:d.stage,replaces:d.replaces||""}};
    const body=new Blob(["--"+boundary+"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n",JSON.stringify(meta),"\r\n--"+boundary+"\r\nContent-Type: "+(stored.data.type||"application/octet-stream")+"\r\n\r\n",bytes,"\r\n--"+boundary+"--"]);
    const r=await request("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",{method:"POST",headers:{Authorization:"Bearer "+access,"Content-Type":"multipart/related; boundary="+boundary},body});
    if(!r.ok&&r.status!==409)throw new Error("Drive upload HTTP "+r.status);
    m=await metadata(access,id);
   }
-  if(!m||m.appProperties?.documentId!==d.id||m.appProperties?.sha256!==hash||Number(m.size)!==bytes.byteLength||!m.parents?.includes(parent))throw new Error("Archive metadata mismatch");
+  if(!m||m.appProperties?.documentId!==d.id||m.appProperties?.sha256!==hash||Number(m.size)!==bytes.byteLength)throw new Error("Archive metadata mismatch");
   // Verify access and bytes before marking archived, including after an interrupted upload.
   const read=await request("https://www.googleapis.com/drive/v3/files/"+id+"?alt=media",{headers:{Authorization:"Bearer "+access}});
   if(!read.ok||await digest(await read.arrayBuffer())!==hash)throw new Error("Archive readback failed");
+  if(!m.parents?.includes(parent)){
+   const query=new URLSearchParams({addParents:parent});
+   if(m.parents?.length)query.set("removeParents",m.parents.join(","));
+   await api(access,"files/"+encodeURIComponent(id)+"?"+query,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+   const moved=await metadata(access,id);
+   if(!moved?.parents?.includes(parent))throw new Error("Archive folder verification failed");
+  }
   must(await db.rpc("drive_finish_job",{p_lease:lease,p_document:d.id,p_hash:hash}));
   const cleanup=await cleanupSource(connection,d.id).catch(()=>({source_removed:false}));
   return {...cleanup,processed:1,archived:true};
