@@ -437,20 +437,38 @@ async function review(d,status){
  }catch(e){err(e)}finally{reviewing.delete(d.id)}
 }
 async function authorize(d,status){if(!confirm(status==='approved'?'Autorizzare la richiesta?':'Non autorizzare la richiesta?'))return;const {error}=await sb.from('documents').update({authorization:status,authorized_at:new Date().toISOString()}).eq('id',d.id);if(error){err(error);return}const r=d.worker_id&&!d.submitted_name?await addNotification(d.worker_id,'authorization',documentMessage(d,'authorization',status)):{error:null};if(r.error)err(r.error);await refreshAdmin()}
+function reminderWeekRange(value){
+ if(!value)return '';
+ const end=new Date(value+'T12:00:00Z');
+ if(end.getUTCDay()!==5)return '';
+ const start=new Date(end);
+ start.setUTCDate(start.getUTCDate()-4);
+ end.setUTCDate(end.getUTCDate()+2);
+ const format=(date,options)=>new Intl.DateTimeFormat('it-IT',{timeZone:'UTC',...options}).format(date);
+ const sameYear=start.getUTCFullYear()===end.getUTCFullYear();
+ const first=sameYear&&start.getUTCMonth()===end.getUTCMonth()?start.getUTCDate():format(start,{day:'numeric',month:'long',...(!sameYear?{year:'numeric'}:{})});
+ return 'dal '+first+' al '+format(end,{day:'numeric',month:'long',year:'numeric'});
+}
+function showReminderWeek(){
+ const range=reminderWeekRange($('weekDate').value);
+ $('reminderWeekRange').textContent=range?'Settimana di riferimento '+range:'';
+}
+$('weekDate').addEventListener('change',showReminderWeek);
+showReminderWeek();
 $('findMissing').onclick=async()=>{const week=$('weekDate').value,site=$('adminSite').value;if(!week){msg('Seleziona un venerdì.');return}if(new Date(week+'T12:00:00').getDay()!==5){msg('Seleziona una data che sia venerdì.');return}const first=new Date(week+'T12:00:00');first.setDate(first.getDate()-6);const start=isoLocalDate(first);const {data,error}=await sb.from('documents').select('worker_id,week_ending,created_at,stage,review_status').in('stage',['weekly','replacement']).eq('week_ending',week);if(error){err(error);return}const delivered=new Set((data||[]).filter(x=>x.review_status!=='rejected').map(x=>x.worker_id));missing=people.filter(p=>p.active&&p.role==='worker'&&p.site&&(!site||p.site===site)&&!delivered.has(p.id));const area=$('missingList');area.replaceChildren();if(!missing.length){area.textContent='Tutti hanno consegnato per la settimana selezionata.';return}for(const p of missing){const row=node('label',null,'doc-row'),cb=document.createElement('input');cb.type='checkbox';cb.checked=true;cb.style.width='auto';cb.dataset.uid=p.id;row.append(cb,node('span',`${p.full_name} · ${p.site}`));area.append(row)}msg(`${missing.length} lavoratori senza consegna per il venerdì selezionato.`)};
 function selectedMissing(){return missing.filter(p=>document.querySelector(`#missingList input[data-uid="${p.id}"]`)?.checked)}
-$('sendReminders').onclick=async()=>{const sel=selectedMissing(),week=$('weekDate').value;if(!sel.length){msg('Nessun lavoratore selezionato.');return}if(!confirm(`Inviare ${sel.length} solleciti nell'app?`))return;let sent=0,duplicates=0;for(const p of sel){const r=await addNotification(p.id,'reminder',`Non risulta consegnato il foglio presenze della settimana con venerdì ${week}. Carica il foglio cartaceo compilato e firmato.`,week);if(r.error){if(r.error.code==='23505')duplicates++;else err(r.error)}else sent++}msg(`${sent} notifiche nell'app registrate; ${duplicates} solleciti già presenti.`)};
+$('sendReminders').onclick=async()=>{const sel=selectedMissing(),week=$('weekDate').value;if(!sel.length){msg('Nessun lavoratore selezionato.');return}if(!confirm(`Inviare ${sel.length} solleciti nell'app?`))return;let sent=0,duplicates=0;for(const p of sel){const r=await addNotification(p.id,'reminder',`Non risulta consegnato il foglio presenze della settimana ${reminderWeekRange(week)}. Carica il foglio cartaceo compilato e firmato.`,week);if(r.error){if(r.error.code==='23505')duplicates++;else err(r.error)}else sent++}msg(`${sent} notifiche nell'app registrate; ${duplicates} solleciti già presenti.`)};
 $('whatsappReminders').onclick=()=>{
  const selected=selectedMissing();
  if(!selected.length){msg('Nessun lavoratore selezionato.');return;}
  const links=$('whatsappReminderLinks');
  links.replaceChildren();
- const week=$('weekDate').value.split('-').reverse().join('/');
+ const week=reminderWeekRange($('weekDate').value);
  for(const person of selected){
   let phone=String(person.phone||'').replace(/\D/g,'').replace(/^00/,'');
   if(/^3\d{8,9}$/.test(phone))phone='39'+phone;
   if(!/^[1-9]\d{7,14}$/.test(phone)){links.append(node('p','Numero WhatsApp mancante o non valido per '+person.full_name+'.'));continue;}
-  const message='👋 Ciao '+person.full_name+'!\n\n📋 Ti ricordo di caricare il foglio presenze settimanale compilato e firmato.\n📅 Settimana di riferimento del '+week+'\n📲 Caricalo su Lavoro Facile:\nhttps://shorturl.at/GlqTY\n\nGrazie!';
+  const message='👋 Ciao '+person.full_name+'!\n\n📋 Ti ricordo di caricare il foglio presenze settimanale compilato e firmato.\n📅 Settimana di riferimento '+week+'\n📲 Caricalo su Lavoro Facile:\nhttps://shorturl.at/GlqTY\n\nGrazie!';
   const link=node('a','💬 Apri WhatsApp per '+person.full_name,'doc-button outline');
   link.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message);
   links.append(link);
