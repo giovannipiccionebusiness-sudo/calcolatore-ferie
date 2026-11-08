@@ -150,8 +150,9 @@ async function worker(){
   let parent=root;
   const kind=documentNames[d.category];
   if(!kind)throw new Error("Unsupported document category");
-  const names=[({N153:"N153 - Corte d’Appello",N148:"N148 - ENAV",N154:"N154 - Acquedotto Pugliese"} as Record<string,string>)[d.site]||d.site,(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",kind.folder];
-  const keys=[d.site,p.key,"category:"+kind.folder];
+  const year=d.month.slice(0,4);
+  const names=[({N153:"N153 - Corte d’Appello",N148:"N148 - ENAV",N154:"N154 - Acquedotto Pugliese"} as Record<string,string>)[d.site]||d.site,(p.full_name||"Lavoratore").replace(/[\\/]/g," ").slice(0,120)+" ["+p.key+"]",year,kind.folder];
+  const keys=[d.site,p.key,year,"category:"+kind.folder];
   let path="root";
   for(let i=0;i<keys.length;i++){path+="/"+keys[i];parent=await folder(access,path,names[i],parent);}
   const stored=await db.storage.from("private-documents").download(d.file_path);
