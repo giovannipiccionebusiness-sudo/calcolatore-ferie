@@ -1,4 +1,4 @@
-import {downloadDocument} from './document-download.js?v=116';
+import {downloadDocument} from './document-download.js?v=119';
 import {scanPDF} from './pdf-scan.js?v=35';
 import {cleanPaper} from './paper-clean.js?v=35';
 import {edgePaper} from './edge-crop.js?v=35';
@@ -21,7 +21,7 @@ export async function autoScanPhoto(blob){
   const file=await new Promise(r=>page.toBlob(r,'image/jpeg',.93));if(!file)throw Error('Impossibile preparare la scansione.');return {file,cropped,width:page.width,height:page.height};
  }finally{image?.close?.();URL.revokeObjectURL(url);}
 }
-export function createAutoArchiveScanner({client,allowed,openOriginal,monthlyStatus,documentScanStatus,onMonthClosed=()=>{}}){
+export function createAutoArchiveScanner({client,getSession,allowed,openOriginal,monthlyStatus,documentScanStatus,onMonthClosed=()=>{}}){
  let queue=Promise.resolve(),epoch=0;const jobs=new Map(),urls=new Set(),timers=new Set(),closedSeen=new Set();
  const node=(tag,text)=>{const n=document.createElement(tag);if(text)n.textContent=text;return n;};
  function clear(){epoch++;for(const t of timers)clearTimeout(t);timers.clear();jobs.clear();for(const url of urls)URL.revokeObjectURL(url);urls.clear();document.querySelectorAll('.auto-scan-image').forEach(i=>i.removeAttribute('src'));document.querySelectorAll('.auto-scan-dialog').forEach(d=>{d.close();d.remove();});}
@@ -41,7 +41,7 @@ export function createAutoArchiveScanner({client,allowed,openOriginal,monthlySta
    if(!current())return null;
    let row=r.data?.source_path===d.file_path&&r.data.algorithm_version===(monthly&&!pdf?4:5)?r.data:null,blob;
    if(row){const saved=await db.storage.from('document-scans-test').download(row.file_path);if(!saved.error)blob=saved.data;}
-   if(!blob){state.textContent='Ritaglio e miglioramento automatici in corso…';const src={data:await downloadDocument(db,d)};if(!current())return null;
+   if(!blob){state.textContent='Ritaglio e miglioramento automatici in corso…';const src={data:await downloadDocument(db,d,getSession()?.access_token)};if(!current())return null;
     const result=pdf?await scanPDF(src.data,autoScanPhoto,(n,total)=>{state.textContent=`Ritaglio e miglioramento pagina ${n} di ${total}…`;}):await autoScanPhoto(src.data);if(!current())return null;blob=result.file;
     const path=d.id+(pdf?'/auto-v3.pdf':'/auto-v3.jpg'),upload=await db.storage.from('document-scans-test').upload(path,blob,{contentType:pdf?'application/pdf':'image/jpeg',upsert:true});if(upload.error)throw upload.error;if(!current())return null;
     row={document_id:d.id,source_path:d.file_path,file_path:path,cropped:result.cropped,algorithm_version:monthly&&!pdf?4:5};const save=await db.from('test_document_scans').upsert(row,{onConflict:'document_id'});if(save.error)throw save.error;

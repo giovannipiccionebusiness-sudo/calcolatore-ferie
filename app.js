@@ -1,13 +1,13 @@
-import {documentObjectUrl,downloadDocument} from './document-download.js?v=116';
+import {documentObjectUrl,downloadDocument} from './document-download.js?v=119';
 import {createNotificationReport} from './notification-report.js?v=98';
 import {createSupervisor} from './supervisor.js?v=117';
 import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
-import {createPresenceConsole} from './presence-ui.js?v=116';
-import './app-version.js?v=118';
+import {createPresenceConsole} from './presence-ui.js?v=119';
+import './app-version.js?v=119';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
-import {createHourBudget} from './hour-budget-ui.js?v=116';
+import {createHourBudget} from './hour-budget-ui.js?v=119';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
@@ -21,8 +21,8 @@ import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from '
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
-import {createWorkerArchive} from './archive.js?v=116';
-import {createAutoArchiveScanner} from './auto-scan.js?v=116';
+import {createWorkerArchive} from './archive.js?v=119';
+import {createAutoArchiveScanner} from './auto-scan.js?v=119';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=35';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
@@ -333,7 +333,7 @@ async function previewArchiveOriginal(d){
  dialog.showModal();
  const owner=session?.user?.id;
  try{
-  const file=await downloadDocument(sb,d);
+  const file=await downloadDocument(sb,d,session?.access_token);
   if(!dialog.open)return;
   if(!adminAllowed()||session?.user?.id!==owner){dialog.close();return;}
   url=URL.createObjectURL(file);
@@ -359,7 +359,7 @@ async function previewArchiveOriginal(d){
 async function openFile(d){
  try{
   msg('Apertura documento…');
-  window.location.assign(await documentObjectUrl(sb,d));
+  window.location.assign(await documentObjectUrl(sb,d,session?.access_token));
  }catch(e){err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});}
 }
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';
@@ -557,8 +557,8 @@ async function monthlyStatus(action,document_id){
  const result=await r.json();if(!r.ok)throw Error(result.error||'Chiusura mensile non disponibile.');return result;
 }
 const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
-const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:previewArchiveOriginal,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
-const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
+const automaticScans=createAutoArchiveScanner({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openOriginal:previewArchiveOriginal,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
+const archive=createWorkerArchive({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);notificationCenter.refresh(true);}}};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});

@@ -1,4 +1,4 @@
-import {documentObjectUrl} from './document-download.js?v=116';
+import {documentObjectUrl} from './document-download.js?v=119';
 import {inlineVerification} from './presence-inline-core.js?v=112';
 import {declarationNote} from './presence-draft-core.js?v=100';
 import {prepareDeclaration} from './presence-acquire-core.js?v=99';
@@ -109,7 +109,7 @@ export function createPresenceConsole({getClient,getSession,getProfile}){
   activeDialog?.close();activeDialog?.remove();const d=el('dialog',null,'pc-dialog'),head=el('div',null,'pc-dialog-heading'),h=el('h2',title);h.id='pc-dialog-title';d.setAttribute('aria-labelledby',h.id);head.append(h);button(head,'×',()=>d.close(),'pc-close').setAttribute('aria-label','Chiudi finestra');const content=el('div'),message=el('p',null,'doc-muted');message.setAttribute('role','status');d.append(head,content,message);d.addEventListener('close',()=>{d.remove();if(activeDialog===d)activeDialog=null;});document.body.append(d);activeDialog=d;d.showModal();return {d,content,message};
  }
  function dialogAction(ui,text,fn){return button(ui.content,text,async()=>{if(busy)return;busy=true;const id=getSession()?.user.id;ui.d.querySelectorAll('button').forEach(b=>b.disabled=true);try{if(!allowed())throw Error('Accedi come amministratore');await fn();if(getSession()?.user.id!==id)throw Error('Sessione cambiata');}catch(e){ui.message.textContent=e.message;}finally{busy=false;if(ui.d.isConnected)ui.d.querySelectorAll('button').forEach(b=>b.disabled=false);}});}
- async function openSheet(d,ui){if(!allowed())return;try{const url=await documentObjectUrl(getClient(),d);if(allowed())window.open(url,'_blank','noopener,noreferrer');}catch(e){ui.message.textContent='Foglio non disponibile: '+e.message;}}
+ async function openSheet(d,ui){if(!allowed())return;try{const url=await documentObjectUrl(getClient(),d,getSession()?.access_token);if(allowed())window.open(url,'_blank','noopener,noreferrer');}catch(e){ui.message.textContent='Foglio non disponibile: '+e.message;}}
  function personDialog(p){
   const ui=dialog(fullName(p));ui.content.append(el('p',CDCS[p.site]+' · '+(p.account_id?'Account collegato':'Senza account')));
   if(!p.imported_key){const surname=field(ui.content,'Cognome (per l’ordine alfabetico)','text',p.name_unconfirmed?'':p.surname),given=field(ui.content,'Nome','text',p.given_name||'');dialogAction(ui,'Salva cognome e nome',async()=>{if(!surname.value.trim())throw Error('Indica il cognome');const r=await ensureRegistry(p);await save('hour_budget_registry',{person_key:p.person_key},{surname:surname.value.trim(),given_name:given.value.trim()},r);ui.d.close();await load();});}
