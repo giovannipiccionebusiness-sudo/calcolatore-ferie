@@ -1,11 +1,11 @@
-import {documentObjectUrl} from './document-download.js?v=116';
+import {documentObjectUrl,downloadDocument} from './document-download.js?v=116';
 import {createNotificationReport} from './notification-report.js?v=98';
 import {createSupervisor} from './supervisor.js?v=117';
 import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=116';
-import './app-version.js?v=117';
+import './app-version.js?v=118';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=116';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -318,6 +318,44 @@ async function sendUploadDraft(draft){
  }finally{uploadProgressListener=null;uploading=false;uploadButtons.forEach(id=>$(id).disabled=false);}
  if(completedWeek)weekChanges.open(completedWeek).catch(e=>msg('Foglio caricato. Variazioni non ancora inserite: '+e.message));
 }
+async function previewArchiveOriginal(d){
+ const dialog=document.createElement('dialog');
+ dialog.setAttribute('aria-label','Originale del documento');
+ dialog.style.cssText='width:min(92vw,800px);max-height:90dvh;padding:16px;border:1px solid #bdd7cd;border-radius:16px';
+ const close=node('button','Chiudi','doc-link');
+ close.type='button';
+ close.onclick=()=>dialog.close();
+ const status=node('p','Caricamento dell’originale…');
+ dialog.append(close,status);
+ document.body.append(dialog);
+ let url;
+ dialog.addEventListener('close',()=>{if(url)URL.revokeObjectURL(url);dialog.remove();},{once:true});
+ dialog.showModal();
+ const owner=session?.user?.id;
+ try{
+  const file=await downloadDocument(sb,d);
+  if(!dialog.open)return;
+  if(!adminAllowed()||session?.user?.id!==owner){dialog.close();return;}
+  url=URL.createObjectURL(file);
+  const link=node('a','Scarica originale','doc-link');
+  link.href=url;
+  link.download=d.file_name||'originale';
+  status.replaceChildren(link);
+  if(/^image\/(jpeg|png|webp)$/.test(file.type)){
+   const image=document.createElement('img');
+   image.alt='Originale del documento';
+   image.style.cssText='display:block;max-width:100%;height:auto;margin:12px auto';
+   image.src=url;
+   dialog.append(image);
+  }else if(file.type==='application/pdf'){
+   const open=node('a','Apri PDF','doc-link');
+   open.href=url;
+   open.target='_blank';
+   open.rel='noopener noreferrer';
+   status.prepend(open,document.createTextNode(' '));
+  }
+ }catch(e){if(dialog.open)status.textContent=e.message||'Originale non disponibile.';}
+}
 async function openFile(d){
  try{
   msg('Apertura documento…');
@@ -519,7 +557,7 @@ async function monthlyStatus(action,document_id){
  const result=await r.json();if(!r.ok)throw Error(result.error||'Chiusura mensile non disponibile.');return result;
 }
 const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
-const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:openFile,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
+const automaticScans=createAutoArchiveScanner({client:()=>sb,allowed:adminAllowed,openOriginal:previewArchiveOriginal,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
 const archive=createWorkerArchive({client:()=>sb,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);notificationCenter.refresh(true);}}};
