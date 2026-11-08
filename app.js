@@ -37,11 +37,11 @@ const statusLabel={pending:'In verifica',verified:'Documento verificato',rejecte
 const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const monthNow=()=>isoLocalDate(new Date()).slice(0,7);
 $('month').value=monthNow();$('adminMonth').value=monthNow();
-$('weekDate').value=lastReminderFriday();$('workerWeek').value=weeklyEnd(false);
-function lastReminderFriday(now=new Date()){
+$('weekDate').value=currentReminderFriday();$('workerWeek').value=weeklyEnd(false);
+function currentReminderFriday(now=new Date()){
  const [year,month,day]=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(now).split('-').map(Number);
  const date=new Date(Date.UTC(year,month-1,day,12));
- date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+1)%7-1);
+ date.setUTCDate(date.getUTCDate()-(date.getUTCDay()+2)%7);
  return date.toISOString().slice(0,10);
 }
 let saturdayWorker=false;
