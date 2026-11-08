@@ -38,6 +38,7 @@ const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0
 const monthNow=()=>isoLocalDate(new Date()).slice(0,7);
 $('month').value=monthNow();$('adminMonth').value=monthNow();
 $('weekDate').value=currentReminderFriday();$('workerWeek').value=weeklyEnd(false);
+$('workerWeekChoice').onchange=()=>{$('workerWeek').value=$('workerWeekChoice').value;};
 function currentReminderFriday(now=new Date()){
  const [year,month,day]=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(now).split('-').map(Number);
  const date=new Date(Date.UTC(year,month-1,day,12));
@@ -45,6 +46,7 @@ function currentReminderFriday(now=new Date()){
  return date.toISOString().slice(0,10);
 }
 let saturdayWorker=false;
+renderWorkerWeekChoices();
 function weeklyEnd(saturday,now=new Date()){
  const [y,m,d]=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Rome'}).format(now).split('-').map(Number);
  const day=new Date(Date.UTC(y,m-1,d,12));
@@ -59,6 +61,7 @@ async function loadWeeklyEnd(){
  if(session?.user?.id!==owner)return;
  saturdayWorker=profile?.weekly_contract_saturday??!!data?.schedule?.[5]?.length;
  $('workerWeek').value=weeklyEnd(saturdayWorker);
+ renderWorkerWeekChoices();
 }
 function weeklyKey(date){
  if(!saturdayWorker||!date)return date;
@@ -250,6 +253,7 @@ async function restoreUploadState(){
  pendingDraft=await readUploadDraft(session.user.id).catch(()=>null);
  if(saved){
   $('month').value=saved.month;$('workerWeek').value=saved.week&&saturdayWorker?new Date(Date.parse(saved.week+'T12:00:00Z')+86400000).toISOString().slice(0,10):saved.week||'';
+  renderWorkerWeekChoices();
   if(saved.stage==='request'){$('docType').value=saved.category;$('docNote').value=saved.note||'';}
  }
  if(pendingDraft)$('month').value=pendingDraft.payload.month;
@@ -267,7 +271,7 @@ async function validateUploadSelection(a){
  const month=weekly?week.slice(0,7):$('month').value;
  if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw new Error('Seleziona la fine della settimana o il mese di riferimento.');
  if(weekly&&(!week||!/^\d{4}-\d{2}-\d{2}$/.test(week)||new Date(week+'T12:00:00').getDay()!==5||date>weeklyEnd(saturdayWorker))){
-  $('workerWeek').focus();throw new Error('Seleziona la fine della settimana prevista dal tuo orario.');
+  $('workerWeekChoice').focus();throw new Error('Seleziona la fine della settimana prevista dal tuo orario.');
  }
  let matching=docs;
  if(a==='replacement'&&month!==$('month').value){
@@ -443,6 +447,21 @@ async function review(d,status){
  }catch(e){err(e)}finally{reviewing.delete(d.id)}
 }
 async function authorize(d,status){if(!confirm(status==='approved'?'Autorizzare la richiesta?':'Non autorizzare la richiesta?'))return;const {error}=await sb.from('documents').update({authorization:status,authorized_at:new Date().toISOString()}).eq('id',d.id);if(error){err(error);return}const r=d.worker_id&&!d.submitted_name?await addNotification(d.worker_id,'authorization',documentMessage(d,'authorization',status)):{error:null};if(r.error)err(r.error);await refreshAdmin()}
+function renderWorkerWeekChoices(){
+ const selected=$('workerWeek').value;
+ const choice=$('workerWeekChoice');
+ const end=weeklyEnd(saturdayWorker);
+ const date=new Date(end+'T12:00:00Z');
+ const dates=[];
+ for(let i=0;i<104;i++){
+  dates.push(date.toISOString().slice(0,10));
+  date.setUTCDate(date.getUTCDate()-7);
+ }
+ if(selected&&!dates.includes(selected)&&reminderWeekRange(weeklyKey(selected)))dates.push(selected);
+ choice.replaceChildren(...dates.map(value=>new Option(reminderWeekRange(weeklyKey(value)),value)));
+ choice.value=selected||end;
+ $('workerWeek').value=choice.value;
+}
 function reminderWeekRange(value){
  if(!value)return '';
  const end=new Date(value+'T12:00:00Z');
