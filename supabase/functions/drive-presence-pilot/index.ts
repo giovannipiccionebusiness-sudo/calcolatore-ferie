@@ -18,7 +18,8 @@ Deno.serve(async req=>{
   const {data:profile,error:pe}=await db.from('profiles').select('role,active').eq('id',auth.user.id).single();
   if(pe||!profile?.active||profile.role!=='admin')return reply({error:'Solo amministratore'},403);
   // PILOT_AUTH_END
-  const {documentId}=await req.json();
+  const {documentId,imageBase64,sourceDay}=await req.json();
+  if(imageBase64!==undefined&&(typeof imageBase64!=='string'||imageBase64.length>2800000||!Number.isInteger(sourceDay)||sourceDay<1||sourceDay>31))return reply({error:'Ritaglio non valido'},400);
   if(typeof documentId!=='string'||! /^[0-9a-f-]{36}$/i.test(documentId))return reply({error:'Documento non valido'},400);
   const {data:doc,error:de}=await db.from('documents').select('id,worker_id,category,stage,month,week_ending').eq('id',documentId).eq('worker_id',WORKER).eq('category','presenze').single();
   if(de||!doc||!['weekly','replacement','final'].includes(doc.stage))return reply({error:'Documento non incluso nella prova'},404);
@@ -31,9 +32,14 @@ Deno.serve(async req=>{
   const access=(await token.json()).access_token,headers={Authorization:'Bearer '+access};
   const original=await request('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(job.google_file_id)+'?alt=media',{headers});
   if(!original.ok)throw Error('Lettura originale Drive non riuscita');
-  const bytes=await original.arrayBuffer();
+  let bytes=await original.arrayBuffer();
   if(bytes.byteLength>12582912||await hash(bytes)!==job.sha256)throw Error('Verifica originale non riuscita');
-  const mime=original.headers.get('content-type')?.split(';')[0]||'';
+  let mime=original.headers.get('content-type')?.split(';')[0]||'';
+  if(imageBase64!==undefined){
+   const decoded=Uint8Array.from(atob(imageBase64),c=>c.charCodeAt(0));
+   if(decoded.length<8||decoded[0]!==137||decoded[1]!==80||decoded[2]!==78||decoded[3]!==71)return reply({error:'Ritaglio PNG richiesto'},400);
+   bytes=decoded.buffer;mime='image/png';
+  }
   if(!['application/pdf','image/jpeg','image/png','image/webp'].includes(mime))throw Error('Formato non supportato');
   const boundary='ocr_'+crypto.randomUUID();
   const body=new Blob(['--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name:'TEST_OCR_PRESENZE_'+doc.id,mimeType:'application/vnd.google-apps.document'})+'\r\n--'+boundary+'\r\nContent-Type: '+mime+'\r\n\r\n',bytes,'\r\n--'+boundary+'--']);
@@ -50,6 +56,6 @@ Deno.serve(async req=>{
    const cleanup=await request('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(temp),{method:'PATCH',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({trashed:true})});
    cleanupOk=cleanup.ok;
   }
-  return reply({mode:'preview_only',workerId:WORKER,document:doc,text,cleanupOk,...(!cleanupOk?{temporaryFileId:temp}:{})});
+  return reply({mode:'preview_only',inputMode:imageBase64===undefined?'original':'manual_crop',sourceDay:imageBase64===undefined?null:sourceDay,dayVerified:false,workerId:WORKER,document:doc,text,cleanupOk,...(!cleanupOk?{temporaryFileId:temp}:{})});
  }catch(e){return reply({error:e instanceof Error?e.message:'Prova non riuscita'},500);}
 });

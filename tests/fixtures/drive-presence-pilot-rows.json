@@ -1,0 +1,148 @@
+{
+  "document_id": "ece264ac-6624-4957-8635-53eba15f1672",
+  "page_render_max_dimension": 1800,
+  "day_assignment": "manual_crop_coordinates",
+  "automatic_import_enabled": false,
+  "row_results": [
+    {
+      "day": 1,
+      "text": "",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 2,
+      "text": "________________\r\n\r\n2 12 30 17 50l\r\n15.20",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 3,
+      "text": "________________\r\n\r\n31400 78001\r\n14.00.",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 4,
+      "text": "________________\r\n\r\n14 1400 1800\r\n16.0.",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 5,
+      "text": "________________\r\n\r\n1511400 18001\r\nT4.00.",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 6,
+      "text": "________________\r\n\r\n1674000 18001\r\n14.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 7,
+      "text": "________________\r\n\r\n7",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 8,
+      "text": "________________\r\n\r\n8",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 9,
+      "text": "________________\r\n\r\n1914001800]\r\nTheo",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 10,
+      "text": "________________\r\n\r\n10 12 30 17 501\r\n15.20",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 11,
+      "text": "________________\r\n\r\n11 4400 48001\r\n14.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 12,
+      "text": "________________\r\n\r\n127400 13001\r\n14.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 13,
+      "text": "________________\r\n\r\n13\r\nFERIE",
+      "cleanup_ok": true,
+      "error": null
+    }
+  ],
+  "cell_results": [
+    {
+      "day": 2,
+      "text": "________________\r\n\r\n12\r\n30\r\n17\r\n50\r\n5 20",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 3,
+      "text": "________________\r\n\r\n14\r\n3G\r\n98\r\nDo\r\nhoo",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 4,
+      "text": "________________\r\n\r\n09\r\n182\r\n00\r\n74",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 5,
+      "text": "________________\r\n\r\n14\r\n00\r\n78\r\n4.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 6,
+      "text": "________________\r\n\r\n74\r\n18\r\nh.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 9,
+      "text": "________________\r\n\r\n74\r\nDO\r\n18\r\n06\r\nhoo",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 10,
+      "text": "________________\r\n\r\n12\r\n30\r\n30\r\n5.20",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 11,
+      "text": "________________\r\n\r\n74\r\n96\r\n48\r\n00\r\n4.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 12,
+      "text": "________________\r\n\r\n74\r\n00\r\n18\r\n00\r\n4.00",
+      "cleanup_ok": true,
+      "error": null
+    },
+    {
+      "day": 13,
+      "text": "________________\r\n\r\nFERIE",
+      "cleanup_ok": true,
+      "error": null
+    }
+  ]
+}

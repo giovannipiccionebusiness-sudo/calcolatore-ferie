@@ -21,3 +21,20 @@ Raddrizzare la pagina, individuare la griglia, estrarre giorno/orari/totale per 
 ## Controlli
 
 Richiesta senza accesso rifiutata (401); documento fuori dall'account pilota/non disponibile rifiutato (404). Accesso temporaneo di esecuzione rimosso dopo le prove: la versione finale richiede sempre un amministratore attivo. Nessun pulsante UI né pianificazione aggiunti.
+
+
+## Seconda prova: lettura per righe e celle
+
+Sul foglio del 13 novembre sono state eseguite 23 conversioni Google Drive: 13 ritagli di riga (giorni 1-13) e 10 composizioni delle celle (giorni 2-6, 9-13). Tutte completate, con documenti temporanei cestinati. Il PDF originale è stato renderizzato a dimensione massima 1800 pixel. I ritagli sono stati scelti e controllati manualmente su questa pagina: non costituiscono una prova di individuazione automatica della griglia o del giorno. Nessun numero è stato ridisegnato o corretto prima dell'OCR. Le celle sono state ingrandite e separate da spazi bianchi, escludendo i bordi. Risultati grezzi: `tests/fixtures/drive-presence-pilot-rows.json`.
+
+### Riscontri
+
+- Riga 2, celle separate: Google restituisce `12`, `30`, `17`, `50`, `5 20`. La lettura coincide con il controllo visivo: 12:30-17:50, 320 minuti. Il turno nell'app è 14:00-18:00 e il supplementare registrato è 80 minuti: 240+80=320. Coerenza limitata al totale, non conferma dell'orario contrattuale effettivamente svolto.
+- Riga 10: totale `5.20` riconosciuto, ma gli orari sono incompleti nella lettura per celle. Non promossa a riga affidabile per sola compatibilità con i dati dell'app.
+- Riga 13: `FERIE` riconosciuto sia nel ritaglio di riga sia in quello della nota. Nel database daily_presence non è presente una giornata per il 13 novembre. È una proposta di controllo per l'amministratore, non un'assenza inserita automaticamente né una conferma dell'autorizzazione ferie.
+- Altre righe: errori quali `74` per `14`, `78` per `18`, `h.00` per `4.00`; il ritaglio completo può introdurre `1` dai bordi (`15.20` invece di `5.20`). Le date delle righe vuote non vengono interpretate come zero o riposo.
+- La lettura per celle riconosce i totali di alcune giornate, ma non produce tutte le fasce coerenti. Nessuna percentuale di accuratezza generalizzabile da questo singolo foglio e dai ritagli manuali.
+
+### Esito operativo
+
+Nessuna scrittura di presenze/budget, nessuna notifica inviata, nessuna automazione di upload abilitata. L'endpoint consente solo a un amministratore attivo di fornire ritagli PNG di prova, associati al documento dell'unico lavoratore pilota; restituisce esplicitamente `inputMode: manual_crop` e `dayVerified: false`. L'accesso temporaneo usato per le prove è rimosso dopo l'esecuzione. Prima dell'importazione automatica servono una griglia rilevata automaticamente, controlli per giorno/cella e risultati affidabili su più documenti. Drive da solo, in questa prova, non soddisfa ancora tale requisito.
