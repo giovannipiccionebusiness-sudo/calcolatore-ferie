@@ -2,6 +2,7 @@
 const $=id=>document.getElementById(id);
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
 const sections=[
+ ['ocr','Confronto fogli OCR','▤','Prova assistita · Donatello Annunziata','#driveOcrPilot'],
  ['presence','Presenze e budget','▦','Foglio mensile e ore per CDC','#presenceConsole',true],
  ['documents','Documenti e richieste','▤','Verifiche, ferie e ROL','#pendingDocs, #reviewedDocs',true],
  ['declarations','Ore e assenze','◷','Supplementare e giustificativi','.wc-admin',true],

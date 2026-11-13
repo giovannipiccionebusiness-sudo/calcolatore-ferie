@@ -1,3 +1,4 @@
+import {createDriveOcrPilot} from './drive-ocr-ui.js?v=132';
 import {showDocument} from './document-viewer.js?v=131';
 import {downloadDocument} from './document-download.js?v=119';
 import {createNotificationReport} from './notification-report.js?v=98';
@@ -6,7 +7,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=127';
-import './app-version.js?v=131';
+import './app-version.js?v=132';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=127';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -18,7 +19,7 @@ import {setupOpenedPushNotice} from './push-open-notice.js?v=107';
 import {createAdminMessages} from './admin-messages.js?v=106';
 import {createPushControls} from './push-notifications.js?v=111';
 import {openDocumentCamera} from './live-camera.js?v=60';
-import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from './admin-menu.js?v=103';
+import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from './admin-menu.js?v=132';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
@@ -122,7 +123,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){if(on)queueMicrotask(()=>document.dispatchEvent(new Event('app-session-ready')));accountMenu.refresh(on);if(!on){supervisor.clear();notificationReport.clear();resetAdminMenu();}queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
+function showLogged(on){if(on)queueMicrotask(()=>document.dispatchEvent(new Event('app-session-ready')));accountMenu.refresh(on);if(!on){supervisor.clear();notificationReport.clear();resetAdminMenu();}queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();ocrPilot.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
 const passwordRecovery=setupPasswordRecovery({getClient:()=>authClient,onComplete:async()=>{session=null;profile=null;await reloadAccount();},notice:appNotice});
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -361,7 +362,9 @@ async function sendUploadDraft(draft){
 async function previewArchiveOriginal(d){return openFile(d);}
 async function openFile(d){
  const owner=session?.user?.id;
- return showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',context:['Sezione: '+(typeLabel[d.category]||d.category||'Documenti'),people.find(p=>p.id===d.worker_id)?.full_name||d.recipient_name||(d.worker_id===session?.user?.id?profile?.full_name:''),stageLabel[d.stage],d.month].filter(Boolean).join(' · '),allowed:()=>session?.user?.id===owner&&!!profile?.active});
+ const popup=await showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',context:['Sezione: '+(typeLabel[d.category]||d.category||'Documenti'),people.find(p=>p.id===d.worker_id)?.full_name||d.recipient_name||(d.worker_id===session?.user?.id?profile?.full_name:''),stageLabel[d.stage],d.month].filter(Boolean).join(' · '),allowed:()=>session?.user?.id===owner&&!!profile?.active});
+ if(popup?.open&&adminAllowed()&&d.worker_id==='60d6c259-e421-474b-9c5c-cc1d641e32d5'&&d.category==='presenze')popup.querySelector('nav').append(button('Confronta ore · prova OCR',()=>{popup.close();ocrPilot.openDocument(d);},true));
+ return popup;
 }
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';
  for(const d of docs){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${typeLabel[d.category]} · ${stageLabel[d.stage]}`),node('small',`${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||profile?.full_name||'il collega')));if(d.review_reason)left.append(node('small','Motivo: '+d.review_reason));if(d.authorization==='approved')left.append(node('small','Richiesta autorizzata'));if(d.authorization==='denied')left.append(node('small','Richiesta non autorizzata'));row.append(left,button('Apri',()=>openFile(d),true));if(weekChanges.canOpen(d)&&!docs.some(x=>x.replaces===d.id))left.append(button('Supplementare e assenze',()=>weekChanges.open(d).catch(err),true));area.append(row)}
@@ -620,6 +623,7 @@ const adminMessages=createAdminMessages({getSession:()=>session,getProfile:()=>p
 const colleagueUpload=createColleagueUpload({getSession:()=>session,getProfile:()=>profile,getClient:()=>sb});
 const presenceConsole=createPresenceConsole({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
 const hourBudget=createHourBudget({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile});
+const ocrPilot=createDriveOcrPilot({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile,onOpen:()=>openAdminSection('ocr')});
 const leaveCalculator=createLeaveCalculator({getSession:()=>session,getProfile:()=>profile});
 const supervisor=createSupervisor({getSession:()=>session,getProfile:()=>profile});
 const accountMenu=createAccountMenu({getSession:()=>session,getProfile:()=>profile});

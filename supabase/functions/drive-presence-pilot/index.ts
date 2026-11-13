@@ -1,5 +1,5 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.49.10';
-// Isolated, on-demand pilot: never writes presence, budget or notification rows.
+// Read-only OCR/snapshot endpoint. Budget writes use an authenticated, atomic RPC after human review.
 const WORKER='60d6c259-e421-474b-9c5c-cc1d641e32d5';
 const URL=Deno.env.get('SUPABASE_URL')!,KEY=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const db=createClient(URL,KEY,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -18,7 +18,25 @@ Deno.serve(async req=>{
   const {data:profile,error:pe}=await db.from('profiles').select('role,active').eq('id',auth.user.id).single();
   if(pe||!profile?.active||profile.role!=='admin')return reply({error:'Solo amministratore'},403);
   // PILOT_AUTH_END
-  const {documentId,imageBase64,sourceDay}=await req.json();
+  const input=await req.json();
+  if(input.action==='snapshot'){
+   if(typeof input.month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month))return reply({error:'Mese non valido'},400);
+   const first=input.month+'-01',next=new Date(first+'T12:00:00Z');next.setUTCMonth(next.getUTCMonth()+1);const last=new Date(next.getTime()-86400000).toISOString().slice(0,10);
+   const results=await Promise.all([
+    db.from('profiles').select('id,full_name,site,workplace').eq('id',WORKER).single(),
+    db.from('documents').select('id,worker_id,month,category,stage,week_ending,file_name,file_path,created_at,review_status').eq('worker_id',WORKER).eq('category','presenze').eq('month',input.month).in('stage',['weekly','replacement','final']).neq('review_status','rejected').order('created_at',{ascending:false}).limit(100),
+    db.from('daily_presence').select('*').eq('worker_id',WORKER).gte('day',first).lte('day',last),
+    db.from('worker_shifts').select('*').eq('worker_id',WORKER).order('valid_from',{ascending:false}),
+    db.from('leave_people').select('person_key').eq('account_id',WORKER),
+    db.from('hour_budget_registry').select('*').eq('account_id',WORKER)
+   ]);
+   if(results.some(r=>r.error))throw Error('Impossibile caricare il confronto');
+   let registry=results[5].data?.[0]||null;
+   if(!registry&&results[4].data?.length){const r=await db.from('hour_budget_registry').select('*').in('imported_person_key',results[4].data.map(p=>p.person_key));if(r.error)throw Error('Anagrafica budget non disponibile');registry=r.data?.[0]||null;}
+   let records=[];if(registry){const r=await db.from('hour_budget_days').select('*').eq('person_key',registry.person_key).gte('day',first).lte('day',last);if(r.error)throw Error('Budget non disponibile');records=r.data||[];}
+   return reply({worker:results[0].data,documents:results[1].data,declarations:results[2].data,shifts:results[3].data,registry,records});
+  }
+  const {documentId,imageBase64,sourceDay}=input;
   if(imageBase64!==undefined&&(typeof imageBase64!=='string'||imageBase64.length>2800000||!Number.isInteger(sourceDay)||sourceDay<1||sourceDay>31))return reply({error:'Ritaglio non valido'},400);
   if(typeof documentId!=='string'||! /^[0-9a-f-]{36}$/i.test(documentId))return reply({error:'Documento non valido'},400);
   const {data:doc,error:de}=await db.from('documents').select('id,worker_id,category,stage,month,week_ending').eq('id',documentId).eq('worker_id',WORKER).eq('category','presenze').single();
@@ -56,6 +74,6 @@ Deno.serve(async req=>{
    const cleanup=await request('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(temp),{method:'PATCH',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({trashed:true})});
    cleanupOk=cleanup.ok;
   }
-  return reply({mode:'preview_only',inputMode:imageBase64===undefined?'original':'manual_crop',sourceDay:imageBase64===undefined?null:sourceDay,dayVerified:false,workerId:WORKER,document:doc,text,cleanupOk,...(!cleanupOk?{temporaryFileId:temp}:{})});
+  return reply({mode:'preview_only',inputMode:imageBase64===undefined?'original':'unverified_crop',sourceDay:imageBase64===undefined?null:sourceDay,dayVerified:false,workerId:WORKER,document:doc,text,cleanupOk,...(!cleanupOk?{temporaryFileId:temp}:{})});
  }catch(e){return reply({error:e instanceof Error?e.message:'Prova non riuscita'},500);}
 });
