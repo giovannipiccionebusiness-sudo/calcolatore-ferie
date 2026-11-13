@@ -100,7 +100,20 @@ Deno.serve(async req=>{
    const [{data:items,error:e},{count,error:ce}]=await Promise.all([db.from('app_notifications').select('id,event_key,title,body,kind,created_at,read_at').eq('user_id',user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(offset,offset+29),db.from('app_notifications').select('id',{count:'exact',head:true}).eq('user_id',user.id).is('read_at',null)]);
    if(e||ce)throw e||ce;let tasks=null;const isAdmin=profile.active&&profile.role==='admin';
    if(isAdmin){const {data,error:te}=await db.rpc('get_admin_notification_tasks',{actor:user.id,page_offset:0});if(te)throw te;tasks=data;}
-   return reply({items:items||[],unread:count||0,isAdmin,tasks});
+   let badgeUnread=count||0;
+   if(isAdmin){
+    const {count:linked,error:le}=await db.from('app_notifications').select('id',{count:'exact',head:true}).eq('user_id',user.id).is('read_at',null).in('kind',['admin_review','admin_authorization','admin_registration','admin_presence_day','admin_presence_week']);
+    if(le)throw le;badgeUnread=Math.max(0,badgeUnread-(linked||0));
+   }
+   return reply({items:items||[],unread:count||0,badgeUnread,isAdmin,tasks});
+  }
+  if(body.action==='read_task_notice'){
+   if(!profile.active||profile.role!=='admin')return reply({error:'Solo amministratore'},403);
+   const t=body.task,kind=({review:'admin_review',authorization:'admin_authorization',registration:'admin_registration'} as Record<string,string>)[t?.task_kind];
+   if(!kind||!/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(t?.target_id||''))return reply({error:'Attività non valida'},400);
+   const key=kind+':'+t.target_id;
+   const {error:e}=await db.from('app_notifications').update({read_at:new Date().toISOString()}).eq('user_id',user.id).eq('kind',kind).is('read_at',null).or('event_key.eq.'+key+',event_key.like.'+key+':*');
+   if(e)throw e;return reply({ok:true});
   }
   if(body.action==='read_notice'){
    let query=db.from('app_notifications').update({read_at:new Date().toISOString()}).eq('user_id',user.id).is('read_at',null);
