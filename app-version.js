@@ -1,6 +1,6 @@
 // Updates are offered only when newer code is available; work is never reloaded automatically.
-export const APP_VERSION=112;
-export const APP_VERSION_LABEL='9.22';
+export const APP_VERSION=113;
+export const APP_VERSION_LABEL='9.23';
 export function installVersionControls(){
  const footer=document.createElement('footer');footer.className='app-version-footer';footer.textContent='Lavoro Facile · Versione '+APP_VERSION_LABEL;
  (document.querySelector('main')||document.body).append(footer);
@@ -39,7 +39,7 @@ export function installVersionControls(){
   actions.append(later,update);dialog.append(title,text,status,actions);document.body.append(dialog);dialog.showModal();later.focus();
  }
  async function check(){if(checking||document.visibilityState==='hidden')return;checking=true;try{const r=await fetch('./version.json',{cache:'no-store',signal:AbortSignal.timeout(8000)});if(r.ok){const data=await r.json();if(Number.isInteger(data.version)&&data.version>latest)latest=data.version;}offer();}catch{/* Offline checks must not interrupt work. */}finally{checking=false;}}
- document.addEventListener('visibilitychange',check);window.addEventListener('focus',check);document.addEventListener('close',offer,true);navigator.serviceWorker?.addEventListener('controllerchange',check);check();
+ document.addEventListener('visibilitychange',check);window.addEventListener('focus',check);document.addEventListener('close',offer,true);navigator.serviceWorker?.addEventListener('controllerchange',check);setInterval(check,300000);check();
  return {check};
 }
 export const versionControls=installVersionControls();
