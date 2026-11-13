@@ -6,14 +6,14 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=127';
-import './app-version.js?v=127';
+import './app-version.js?v=128';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=127';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
 import {createAccountMenu} from './account-menu.js?v=50';
-import {createNotificationCenter} from './notification-center.js?v=125';
+import {createNotificationCenter} from './notification-center.js?v=128';
 import {setupOpenedPushNotice} from './push-open-notice.js?v=107';
 import {createAdminMessages} from './admin-messages.js?v=106';
 import {createPushControls} from './push-notifications.js?v=111';
@@ -623,7 +623,7 @@ const hourBudget=createHourBudget({getClient:()=>sb,getSession:()=>session,getPr
 const leaveCalculator=createLeaveCalculator({getSession:()=>session,getProfile:()=>profile});
 const supervisor=createSupervisor({getSession:()=>session,getProfile:()=>profile});
 const accountMenu=createAccountMenu({getSession:()=>session,getProfile:()=>profile});
-const notificationCenter=createNotificationCenter({getSession:()=>session,onOpenTask:openAdminNotificationTask,onOpenPresence:(day,mode)=>dailyPresence.openNotice(day,mode)});
+const notificationCenter=createNotificationCenter({getSession:()=>session,onOpenTask:openAdminNotificationTask,onOpenEvent:openNotificationEvent,onOpenPresence:(day,mode)=>dailyPresence.openNotice(day,mode)});
 const pushControls=createPushControls({getSession:()=>session,mount:notificationCenter.host,getProfile:()=>profile,openSettings:()=>notificationCenter.openSettings()});
 notificationCenter.setControls(pushControls);
 const weekChanges=createWeekChanges({getClient:()=>sb,getSession:()=>session,getProfile:()=>profile,onSaved:async mode=>{msg(mode==='day'?'Giornata salvata. La ritrovi nel riepilogo settimanale.':'Settimana confermata.');await dailyPresence.invalidate();await refreshWorker();}});
@@ -646,7 +646,23 @@ const appReady=boot().catch(err);
 
 
 
-setupOpenedPushNotice(appReady,{onOpenNotice:async notice=>{if(!notice?.eventKey?.startsWith('admin-presence:'))return false;if(!session)return 'pending';await notificationCenter.openPresenceReviewNotice(notice.eventKey);return true;}});
+setupOpenedPushNotice(appReady,{onOpenNotice:async notice=>{
+ if(!session)return 'pending';
+ if(notice?.eventKey?.startsWith('admin-presence:')){await notificationCenter.openPresenceReviewNotice(notice.eventKey);return true;}
+ return openNotificationEvent(notice?.eventKey);
+}});
+async function openNotificationEvent(eventKey){
+ const match=String(eventKey||'').match(/^(admin_review|admin_authorization|admin_registration):([0-9a-f-]{36})(?::|$)/i);
+ if(!match)return false;
+ if(!session)return 'pending';
+ if(!adminAllowed())throw Error('Accedi con l’account amministratore per gestire questo avviso.');
+ const kind={admin_review:'review',admin_authorization:'authorization',admin_registration:'registration'}[match[1]];
+ const table=kind==='registration'?'profiles':'documents';
+ const {data,error}=await sb.from(table).select('*').eq('id',match[2]).maybeSingle();
+ if(error)throw error;if(!data)throw Error('L’elemento non è più disponibile.');
+ await openAdminNotificationTask({task_kind:kind,target_id:data.id,month:data.month,site:data.site});
+ return true;
+}
 document.addEventListener('presence-record-saved',()=>notificationCenter.refresh(true));
 
 
@@ -666,6 +682,19 @@ async function openAdminNotificationTask(task){
  if(!row)throw Error('Questa attività è già stata gestita o sostituita. Aggiorna l’elenco.');
  // Expand the existing compact list so even an older account can be reached.
  for(let parent=row.parentElement;parent;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;if(parent.hasAttribute('data-admin-worker'))parent.hidden=false;}
+ if(task.task_kind!=='registration'){
+  const document=docs.find(d=>d.id===task.target_id);
+  if(document){
+   const popup=await openFile(document);
+   if(popup?.open){
+    const bar=popup.querySelector('nav');
+    const add=(label,action)=>{const control=button(label,async()=>{control.disabled=true;try{await action();popup.close();await notificationCenter.refresh(true);}finally{control.disabled=false;}},true);bar.append(control);};
+    if(document.review_status==='pending'){add('Verifica',()=>review(document,'verified'));add('Respingi',()=>review(document,'rejected'));}
+    else if(document.review_status==='verified'&&['ferie','rol'].includes(document.category)&&document.authorization==='pending'){add('Autorizza',()=>authorize(document,'approved'));add('Non autorizzare',()=>authorize(document,'denied'));}
+   }
+   return;
+  }
+ }
  row.tabIndex=-1;row.scrollIntoView({behavior:'smooth',block:'center'});row.focus({preventScroll:true});row.animate([{backgroundColor:'#d9f3e6'},{backgroundColor:'transparent'}],{duration:2500});
 }
 
