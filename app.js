@@ -1,13 +1,14 @@
-import {documentObjectUrl,downloadDocument} from './document-download.js?v=119';
+import {showDocument} from './document-viewer.js?v=127';
+import {downloadDocument} from './document-download.js?v=119';
 import {createNotificationReport} from './notification-report.js?v=98';
-import {createSupervisor} from './supervisor.js?v=117';
+import {createSupervisor} from './supervisor.js?v=127';
 import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
-import {createPresenceConsole} from './presence-ui.js?v=119';
-import './app-version.js?v=126';
+import {createPresenceConsole} from './presence-ui.js?v=127';
+import './app-version.js?v=127';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
-import {createHourBudget} from './hour-budget-ui.js?v=119';
+import {createHourBudget} from './hour-budget-ui.js?v=127';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
@@ -22,7 +23,7 @@ import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-men
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
 import {createWorkerArchive} from './archive.js?v=119';
-import {createAutoArchiveScanner} from './auto-scan.js?v=119';
+import {createAutoArchiveScanner} from './auto-scan.js?v=127';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=35';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
@@ -357,49 +358,10 @@ async function sendUploadDraft(draft){
  }finally{uploadProgressListener=null;uploading=false;uploadButtons.forEach(id=>$(id).disabled=false);}
  if(completedWeek)weekChanges.open(completedWeek).catch(e=>msg('Foglio caricato. Variazioni non ancora inserite: '+e.message));
 }
-async function previewArchiveOriginal(d){
- const dialog=document.createElement('dialog');
- dialog.setAttribute('aria-label','Originale del documento');
- dialog.style.cssText='width:min(92vw,800px);max-height:90dvh;padding:16px;border:1px solid #bdd7cd;border-radius:16px';
- const close=node('button','Chiudi','doc-link');
- close.type='button';
- close.onclick=()=>dialog.close();
- const status=node('p','Caricamento dell’originale…');
- dialog.append(close,status);
- document.body.append(dialog);
- let url;
- dialog.addEventListener('close',()=>{if(url)URL.revokeObjectURL(url);dialog.remove();},{once:true});
- dialog.showModal();
- const owner=session?.user?.id;
- try{
-  const file=await downloadDocument(sb,d,session?.access_token);
-  if(!dialog.open)return;
-  if(!adminAllowed()||session?.user?.id!==owner){dialog.close();return;}
-  url=URL.createObjectURL(file);
-  const link=node('a','Scarica originale','doc-link');
-  link.href=url;
-  link.download=d.file_name||'originale';
-  status.replaceChildren(link);
-  if(/^image\/(jpeg|png|webp)$/.test(file.type)){
-   const image=document.createElement('img');
-   image.alt='Originale del documento';
-   image.style.cssText='display:block;max-width:100%;height:auto;margin:12px auto';
-   image.src=url;
-   dialog.append(image);
-  }else if(file.type==='application/pdf'){
-   const open=node('a','Apri PDF','doc-link');
-   open.href=url;
-   open.target='_blank';
-   open.rel='noopener noreferrer';
-   status.prepend(open,document.createTextNode(' '));
-  }
- }catch(e){if(dialog.open)status.textContent=e.message||'Originale non disponibile.';}
-}
+async function previewArchiveOriginal(d){return openFile(d);}
 async function openFile(d){
- try{
-  msg('Apertura documento…');
-  window.location.assign(await documentObjectUrl(sb,d,session?.access_token));
- }catch(e){err(e);$('appMsg').scrollIntoView({behavior:'smooth',block:'center'});}
+ const owner=session?.user?.id;
+ return showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',allowed:()=>session?.user?.id===owner&&!!profile?.active});
 }
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';
  for(const d of docs){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${typeLabel[d.category]} · ${stageLabel[d.stage]}`),node('small',`${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||profile?.full_name||'il collega')));if(d.review_reason)left.append(node('small','Motivo: '+d.review_reason));if(d.authorization==='approved')left.append(node('small','Richiesta autorizzata'));if(d.authorization==='denied')left.append(node('small','Richiesta non autorizzata'));row.append(left,button('Apri',()=>openFile(d),true));if(weekChanges.canOpen(d)&&!docs.some(x=>x.replaces===d.id))left.append(button('Supplementare e assenze',()=>weekChanges.open(d).catch(err),true));area.append(row)}

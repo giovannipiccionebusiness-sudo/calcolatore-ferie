@@ -1,3 +1,4 @@
+import {showDocument} from './document-viewer.js?v=127';
 import {downloadDocument} from './document-download.js?v=119';
 import {scanPDF} from './pdf-scan.js?v=35';
 import {cleanPaper} from './paper-clean.js?v=35';
@@ -25,7 +26,7 @@ export function createAutoArchiveScanner({client,getSession,allowed,openOriginal
  let queue=Promise.resolve(),epoch=0;const jobs=new Map(),urls=new Set(),timers=new Set(),closedSeen=new Set();
  const node=(tag,text)=>{const n=document.createElement(tag);if(text)n.textContent=text;return n;};
  function clear(){epoch++;for(const t of timers)clearTimeout(t);timers.clear();jobs.clear();for(const url of urls)URL.revokeObjectURL(url);urls.clear();document.querySelectorAll('.auto-scan-image').forEach(i=>i.removeAttribute('src'));document.querySelectorAll('.auto-scan-dialog').forEach(d=>{d.close();d.remove();});}
- function preview(url,d){if(!allowed())return;const dialog=node('dialog');dialog.className='auto-scan-dialog';const img=node('img');img.src=url;img.alt='Foto ritagliata e migliorata';const b=node('button','Chiudi');b.type='button';b.onclick=()=>{dialog.close();dialog.remove();};dialog.append(node('h3','Scansione automatica'),img,b);dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();}
+ function preview(url,d){if(!allowed())return;showDocument(async()=>{const response=await fetch(url);if(!response.ok)throw Error('Documento non disponibile');return response.blob();},{name:'Scansione documento',allowed});}
  function render(d,container){
   const box=node('div');box.className='auto-scan';container.append(box);
   const original=node('button','Apri originale');original.className='doc-link';original.type='button';original.onclick=()=>{if(allowed())openOriginal(d);};
@@ -55,7 +56,7 @@ export function createAutoArchiveScanner({client,getSession,allowed,openOriginal
     state.textContent=result.pdf?'PDF elaborato pagina per pagina · originale conservato':result.cropped?'Ritagliata e migliorata automaticamente · originale conservato':'Foto intera migliorata: bordi incerti, nessun ritaglio automatico.';
     const img=node('img');img.className='auto-scan-image';img.src=result.url;img.alt=result.cropped?'Foto ritagliata e migliorata':'Foto intera migliorata, ritaglio non applicato';img.loading='lazy';
     const open=node('button','Apri scansione');open.type='button';open.className='doc-link';open.onclick=()=>preview(result.url,d);if(!result.pdf)box.prepend(img);box.append(open);
-    if(result.pdf)open.onclick=()=>{if(allowed())window.location.assign(result.url);};
+    if(result.pdf)open.onclick=()=>preview(result.url,d);
     if(!monthly&&documentScanStatus){const line=node('small','Scansione in attesa di archiviazione su Drive.');box.append(line);const poll=async()=>{if(!current())return;try{const r=await documentScanStatus(d.id);if(!current())return;if(r.job?.status==='done'){line.textContent='Originale e scansione verificati su Drive.';return;}line.textContent=r.job?.last_error?'Archiviazione da riprovare: '+r.job.last_error:'Archiviazione della scansione su Drive in corso…';}catch(e){if(!current())return;line.textContent='Scansione conservata nell’app. Drive in attesa: '+e.message;}const timer=setTimeout(()=>{timers.delete(timer);poll();},10000);timers.add(timer);};poll();}
     if(monthly&&monthlyStatus){const line=node('small','Originale e scansione in attesa di verifica su Drive. I settimanali restano conservati.');box.append(line);let first=true;const poll=async()=>{if(!current())return;try{const r=await monthlyStatus(first?'enqueue':'status',d.id);first=false;if(!current())return;const c=r.closure;if(c?.status==='done'){line.textContent='Originale e scansione verificati su Drive · settimanali precedenti eliminati.';if(!closedSeen.has(d.id)){closedSeen.add(d.id);onMonthClosed();}return;}line.textContent=c?.last_error?'Chiusura non completata: '+c.last_error:'Archiviazione mensile in corso. I settimanali saranno rimossi dopo le verifiche.';}catch(e){if(!current())return;line.textContent='Chiusura mensile in attesa: '+e.message;}const timer=setTimeout(()=>{timers.delete(timer);poll();},10000);timers.add(timer);};poll();}
    }).catch(e=>{jobs.delete(d.id);if(!current())return;state.textContent='Scansione non disponibile. Originale conservato. '+(e.message||'');const retry=node('button','Riprova scansione');retry.type='button';retry.className='doc-link';retry.onclick=()=>{retry.remove();start();};box.append(retry);});
