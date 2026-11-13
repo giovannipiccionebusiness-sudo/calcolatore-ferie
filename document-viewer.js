@@ -1,11 +1,11 @@
 let library;
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
-export async function showDocument(load,{name='Documento',allowed=()=>true}={}){
+export async function showDocument(load,{name='Documento',context='',allowed=()=>true}={}){
  const previous=document.activeElement,dialog=el('dialog');dialog.className='document-viewer';dialog.setAttribute('aria-label',name);
  if(!document.getElementById('document-viewer-style')){const style=el('style');style.id='document-viewer-style';style.textContent=`
  .document-viewer{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));height:90dvh;max-height:90dvh;padding:0;border:0;border-radius:20px;background:#f4faf7;color:#173f3a;overflow:hidden}
  .document-viewer[open]{display:flex;flex-direction:column}.document-viewer::backdrop{background:#102d32aa}
- .document-viewer header{display:flex;align-items:center;gap:12px;padding:14px;background:white;flex-shrink:0}.document-viewer h2{font:700 18px system-ui;margin:0;flex:1;overflow-wrap:anywhere}
+ .document-viewer header{display:flex;align-items:center;gap:12px;padding:14px;background:white;flex-shrink:0}.document-viewer-heading{flex:1;min-width:0}.document-viewer-context{margin:6px 0 0;color:#126358;font:600 14px system-ui;line-height:1.45;overflow-wrap:anywhere}.document-viewer h2{font:700 18px system-ui;margin:0;flex:1;overflow-wrap:anywhere}
  .document-viewer button,.document-viewer a{box-sizing:border-box;min-height:44px;border:1px solid #b6d7cf;border-radius:10px;padding:8px 12px;background:#fff;color:#08695d;font:600 16px system-ui;cursor:pointer;text-decoration:none}
  .document-viewer button:disabled{opacity:.45}.document-viewer nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border-bottom:1px solid #cadfd8;flex-shrink:0}
  .document-viewer output{font:14px system-ui}.document-viewer-viewport{overflow:auto;min-height:0;flex:1;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom;background:#dfe8e5;padding:8px}
@@ -13,7 +13,7 @@ export async function showDocument(load,{name='Documento',allowed=()=>true}={}){
  .document-viewer-surface img,.document-viewer-surface canvas{display:block;max-width:none!important;max-height:none!important;flex-shrink:0;background:white}
  .document-viewer-status{padding:0 14px;margin:6px 0;font:14px system-ui}
  `;document.head.append(style);}
- const head=el('header'),title=el('h2',name),close=el('button','✕');close.type='button';close.setAttribute('aria-label','Chiudi documento');close.onclick=()=>dialog.close();head.append(title,close);
+ const head=el('header'),title=el('h2',name),close=el('button','✕');close.type='button';close.setAttribute('aria-label','Chiudi documento');close.onclick=()=>dialog.close();const heading=el('div');heading.className='document-viewer-heading';heading.append(title);if(context){const detail=el('p',context);detail.className='document-viewer-context';heading.append(detail);}head.append(heading,close);
  const nav=el('nav');nav.setAttribute('aria-label','Controlli documento');
  const button=(text,label,fn)=>{const b=el('button',text);b.type='button';b.setAttribute('aria-label',label);b.onclick=fn;nav.append(b);return b;};
  let zoom=1,pageNumber=1,pdf=null,image=null,baseWidth=0,url=null,closed=false,rendering=false,queued=false,task=null;

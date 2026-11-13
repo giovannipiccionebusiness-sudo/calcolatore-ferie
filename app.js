@@ -1,4 +1,4 @@
-import {showDocument} from './document-viewer.js?v=127';
+import {showDocument} from './document-viewer.js?v=130';
 import {downloadDocument} from './document-download.js?v=119';
 import {createNotificationReport} from './notification-report.js?v=98';
 import {createSupervisor} from './supervisor.js?v=127';
@@ -6,7 +6,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=127';
-import './app-version.js?v=129';
+import './app-version.js?v=130';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=127';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -361,7 +361,7 @@ async function sendUploadDraft(draft){
 async function previewArchiveOriginal(d){return openFile(d);}
 async function openFile(d){
  const owner=session?.user?.id;
- return showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',allowed:()=>session?.user?.id===owner&&!!profile?.active});
+ return showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',context:['Sezione: '+(typeLabel[d.category]||d.category||'Documenti'),people.find(p=>p.id===d.worker_id)?.full_name||d.recipient_name||(d.worker_id===session?.user?.id?profile?.full_name:''),stageLabel[d.stage],d.month].filter(Boolean).join(' · '),allowed:()=>session?.user?.id===owner&&!!profile?.active});
 }
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';
  for(const d of docs){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${typeLabel[d.category]} · ${stageLabel[d.stage]}`),node('small',`${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||profile?.full_name||'il collega')));if(d.review_reason)left.append(node('small','Motivo: '+d.review_reason));if(d.authorization==='approved')left.append(node('small','Richiesta autorizzata'));if(d.authorization==='denied')left.append(node('small','Richiesta non autorizzata'));row.append(left,button('Apri',()=>openFile(d),true));if(weekChanges.canOpen(d)&&!docs.some(x=>x.replaces===d.id))left.append(button('Supplementare e assenze',()=>weekChanges.open(d).catch(err),true));area.append(row)}
