@@ -12,7 +12,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
  const taskTab=document.createElement('button');taskTab.type='button';taskTab.textContent='Da gestire';taskTab.hidden=true;taskTab.setAttribute('aria-pressed','false');messagesTab.before(taskTab);
  const taskSection=document.createElement('section');taskSection.hidden=true;taskSection.innerHTML='<p class="notification-hint">Tutte le attività ancora da completare, di ogni mese e sede. Leggere il riepilogo non equivale ad approvare.</p><p class="task-summary"></p><div class="task-list"></div><div class="doc-toolbar"><button type="button" class="task-prev">Più recenti</button><button type="button" class="task-next">Più vecchie</button><button type="button" class="task-refresh">Aggiorna attività</button></div><p class="task-status" role="status"></p>';history.before(taskSection);
  const taskList=taskSection.querySelector('.task-list'),taskSummary=taskSection.querySelector('.task-summary'),taskStatus=taskSection.querySelector('.task-status'),taskPrev=taskSection.querySelector('.task-prev'),taskNext=taskSection.querySelector('.task-next');
- let tasksData=null,isAdmin=false,taskOffset=0,tasksShown=false,unread=0,taskLoading=false;
+ let tasksData=null,isAdmin=false,taskOffset=0,tasksShown=false,unread=0,badgeUnread=0,taskLoading=false;
  function renderTasks(){
   taskList.replaceChildren();taskSummary.textContent=tasksData?tasksData.total+' da gestire: '+tasksData.registrations+' account, '+tasksData.reviews+' documenti, '+tasksData.authorizations+' richieste, '+(tasksData.presence_days||0)+' giornate e '+(tasksData.presence_weeks||0)+' settimane.':'Caricamento attività…';
   for(const task of tasksData?.items||[]){const article=document.createElement('article'),title=document.createElement('strong'),person=document.createElement('p'),info=document.createElement('small'),action=document.createElement('button');article.className='notification-item';article.style.padding='16px';title.textContent=task.title;person.textContent=task.person;info.textContent=[task.site,task.month,new Date(task.created_at).toLocaleString('it-IT')].filter(Boolean).join(' · ');action.type='button';action.className='doc-button outline';action.style.marginTop='12px';action.textContent=task.task_kind==='registration'?'Vai all’abilitazione':task.task_kind==='authorization'?'Vai all’autorizzazione':'Vai alla verifica';action.onclick=async()=>{action.disabled=true;try{dialog.close();await onOpenTask(task);}catch(error){taskStatus.textContent=error.message;if(getSession()&&!dialog.open)dialog.showModal();}finally{action.disabled=false;}};article.append(title,person,info,action);taskList.append(article);}
@@ -30,7 +30,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
   const session=getSession();if(!session)throw Error('Accedi per leggere le notifiche.');
   const response=await fetch(SUPABASE_URL+'/functions/v1/app-web-push',{method:'POST',headers:{'Content-Type':'application/json',apikey:SUPABASE_ANON_KEY,Authorization:'Bearer '+session.access_token},body:JSON.stringify({action,...extra}),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw Error(data.error||'Notifiche non disponibili. Riprova.');return data;
  }
- function count(value){unread=value;const total=value+(tasksData?.total||0);badge.textContent=total>99?'99+':String(total);badge.hidden=!total;bell.setAttribute('aria-label',isAdmin?'Apri notifiche, '+(tasksData?.total||0)+' attività da gestire e '+value+' avvisi da leggere':value?'Apri notifiche, '+value+' da leggere':'Apri notifiche, nessun avviso da leggere');}
+ function count(value){unread=value;const total=(isAdmin?badgeUnread:value)+(tasksData?.total||0);badge.textContent=total>99?'99+':String(total);badge.hidden=!total;bell.setAttribute('aria-label',isAdmin?'Apri notifiche, '+(tasksData?.total||0)+' attività da gestire e '+badgeUnread+' altri avvisi da leggere':value?'Apri notifiche, '+value+' da leggere':'Apri notifiche, nessun avviso da leggere');}
  function render(){
   list.replaceChildren();for(const item of items){const article=document.createElement('article'),button=document.createElement('button'),title=document.createElement('strong'),date=document.createElement('small'),body=document.createElement('div');article.className='notification-item'+(item.read_at?'':' unread');article.dataset.noticeId=item.id;button.type='button';title.textContent=item.title;date.textContent=new Date(item.created_at).toLocaleString('it-IT')+(item.read_at?' · Letto':' · Da leggere');body.className='notification-body';body.textContent=item.body;body.hidden=true;button.setAttribute('aria-expanded','false');button.append(title,date);article.append(button,body);list.append(article);
    button.onclick=async()=>{
@@ -54,7 +54,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
    const fresh=await api('inbox',{offset});if(getSession()?.user.id!==owner||epoch!==version)return;
    const readAt=new Date().toISOString();for(const item of items)if(ids.includes(item.id)){item.read_at=readAt;const article=[...list.children].find(n=>n.dataset.noticeId===item.id);if(article){article.classList.remove('unread');article.querySelector('small').textContent=new Date(item.created_at).toLocaleString('it-IT')+' · Letto';}}
    if(isAdmin&&fresh.tasks)tasksData=taskOffset?{...fresh.tasks,items:tasksData?.items||[]}:fresh.tasks;
-   count(fresh.unread);result.textContent=unreadLabel(fresh.unread);readVisible.disabled=!items.some(item=>!item.read_at);
+   badgeUnread=fresh.badgeUnread??fresh.unread;count(fresh.unread);result.textContent=unreadLabel(fresh.unread);readVisible.disabled=!items.some(item=>!item.read_at);
   }catch(error){if(getSession()?.user.id===owner&&epoch===version){result.textContent='Impossibile segnare gli avvisi come letti. Riprova. '+error.message;readVisible.disabled=false;}}
   finally{readingPage=false;}
  }
@@ -64,7 +64,7 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
   try{const data=await api('inbox',{offset});if(version!==epoch||getSession()?.user.id!==owner)return;items=data.items;const wasAdmin=isAdmin;isAdmin=!!data.isAdmin;taskTab.hidden=!isAdmin;
    if(isAdmin){tasksData=taskOffset?{...data.tasks,items:tasksData?.items||[]}:data.tasks;if(tasksShown){if(taskOffset)loadTasks();else renderTasks();}}
    else{tasksData=null;if(tasksShown)tab(false);}
-   count(data.unread);if(!wasAdmin&&isAdmin&&dialog.open)showTasks();if(redraw)render();result.textContent=unreadLabel(data.unread);if(redraw&&messagesVisible())await markMessagesRead();}
+   badgeUnread=data.badgeUnread??data.unread;count(data.unread);if(!wasAdmin&&isAdmin&&dialog.open)showTasks();if(redraw)render();result.textContent=unreadLabel(data.unread);if(redraw&&messagesVisible())await markMessagesRead();}
   catch(error){if(version===epoch)result.textContent=error.message;}
   finally{if(version===epoch)loading=false;}
  }
@@ -73,13 +73,19 @@ export function createNotificationCenter({getSession,onOpenTask=async()=>{},onOp
  bell.onclick=()=>{if(!getSession()||dialog.open)return;dialog.showModal();taskOffset=0;if(isAdmin)showTasks();else tab(false);load(true);};dialog.querySelector('.notification-close').onclick=()=>dialog.close();dialog.addEventListener('close',()=>bell.focus({preventScroll:true}));
  dialog.querySelector('.notification-refresh').onclick=()=>load(true);prev.onclick=()=>{offset=Math.max(0,offset-30);load();};next.onclick=()=>{offset+=30;load();};
  readVisible.onclick=async()=>{const ids=items.filter(item=>!item.read_at).map(item=>item.id),owner=user;if(!ids.length)return;readVisible.disabled=true;try{await api('read_notices',{ids});if(user===owner)await load();}catch(error){result.textContent=error.message;readVisible.disabled=false;}};
- function clear(){tasksData=null;isAdmin=false;taskOffset=0;taskTab.hidden=true;taskList.replaceChildren();taskStatus.textContent='';tasksShown=false;epoch++;loading=false;user=null;items=[];offset=0;list.replaceChildren();result.textContent='';count(0);bell.hidden=true;if(dialog.open)dialog.close();}
+ function clear(){tasksData=null;isAdmin=false;badgeUnread=0;taskOffset=0;taskTab.hidden=true;taskList.replaceChildren();taskStatus.textContent='';tasksShown=false;epoch++;loading=false;user=null;items=[];offset=0;list.replaceChildren();result.textContent='';count(0);bell.hidden=true;if(dialog.open)dialog.close();}
  async function refresh(force=false){const id=getSession()?.user.id;if(!id){clear();return;}if(user!==id){clear();user=id;bell.hidden=false;await load(true);}else{bell.hidden=false;if(force||dialog.open&&!settingsShown)await load();}}
  const refreshIfVisible=()=>{if(document.visibilityState==='visible'&&getSession())load(false,dialog.open&&!settingsShown);};window.addEventListener('focus',refreshIfVisible);document.addEventListener('visibilitychange',refreshIfVisible);setInterval(refreshIfVisible,60000);
  document.addEventListener('push-notice-opened',async event=>{if(!getSession())return;try{if(event.detail?.eventKey)await api('read_notice',{eventKey:event.detail.eventKey});await load(true,dialog.open&&!settingsShown);}catch{}});
  navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='PUSH_NOTICE_RECEIVED')refreshIfVisible();});
  async function openPresenceReviewNotice(eventKey){const owner=getSession()?.user.id;if(!owner)throw Error('Accedi come amministratore.');await api('read_notice',{eventKey});await load(true,false);const data=await api('presence_task',{eventKey});if(getSession()?.user.id!==owner)throw Error('Sessione cambiata.');await onOpenTask(data.task);await load(true,dialog.open&&!settingsShown);}
- return {refresh,openPresenceReviewNotice,openSettings(){if(!getSession())return;if(!dialog.open)dialog.showModal();tab(true);},host:dialog.querySelector('.notification-settings-host'),setControls(value){controller=value;}};
+ return {refresh,markTaskRead:async task=>{
+   if(['presence_day','presence_week'].includes(task.task_kind)){
+    const mode=task.task_kind==='presence_week'?'week':'day';
+    if(task.day&&task.version)await api('read_notice',{eventKey:'admin-presence:'+mode+':'+task.target_id+':'+task.day+':'+task.version});
+   }else await api('read_task_notice',{task:{task_kind:task.task_kind,target_id:task.target_id}});
+   await load(true,false);
+  },openPresenceReviewNotice,openSettings(){if(!getSession())return;if(!dialog.open)dialog.showModal();tab(true);},host:dialog.querySelector('.notification-settings-host'),setControls(value){controller=value;}};
 }
 
 
