@@ -32,7 +32,9 @@ async function token(body:Record<string,string>){
  if(!r.ok){
   const failure=await r.json().catch(()=>({}));
   // Only fixed messages leave the backend: never return Google's raw response or request.
-  throw new Error(googleTokenError(typeof failure.error==="string"?failure.error:"",r.status));
+  const reconnect=body.grant_type==='refresh_token'&&failure.error==='invalid_grant';
+  const error=new Error(reconnect?'Il collegamento a Google Drive deve essere rinnovato dal responsabile.':googleTokenError(typeof failure.error==="string"?failure.error:"",r.status));
+  if(reconnect)Object.assign(error,{code:'ARCHIVE_RECONNECT_REQUIRED'});throw error;
  }
  return await r.json();
 }
@@ -296,14 +298,16 @@ Deno.serve(async(req:Request)=>{
    if(req.headers.get("x-drive-worker")!==runtime.worker_key)return json({error:"Unauthorized"},401);
    return json(await worker());
   }
-  const {action,document_id}=await req.json();
+  const {action,document_id,check_connection}=await req.json();
   if(action==="read-archived")return await readArchived(req,document_id);
   if(action==="read-archived-internal")return await readArchived(req,document_id,true);
   const user=await admin(req);
   if(action==="status"){
    const c=must(await db.from("drive_credentials").select("connected_at,root_id").eq("singleton",true).maybeSingle());
    const jobs=must(await db.from("drive_archive_jobs").select("*").order("created_at",{ascending:false}).limit(200));
-   return json({configured:!!CLIENT&&!!SECRET,callback:REDIRECT,connection:c,jobs});
+   let connectionError=null;
+   if(c&&check_connection===true){try{const credentials=must(await db.from('drive_credentials').select('refresh_token').eq('singleton',true).single()) as any;await token({refresh_token:credentials.refresh_token,grant_type:'refresh_token'});}catch(error){connectionError=error instanceof Error?error.message:'Collegamento Drive non disponibile';}}
+   return json({configured:!!CLIENT&&!!SECRET,callback:REDIRECT,connection:c,connectionError,jobs});
   }
   if(action==="connect"){
    if(!CLIENT||!SECRET)return json({error:"Configura GOOGLE_DRIVE_CLIENT_ID e GOOGLE_DRIVE_CLIENT_SECRET nei Secrets della funzione Supabase."},409);
@@ -323,7 +327,7 @@ Deno.serve(async(req:Request)=>{
   return json({error:"Unknown action"},400);
  }catch(e){
   const m=e instanceof Error?e.message:"Request failed";
-  return json({error:m},m==="Unauthorized"?401:400);
+  const code=(e as {code?:string})?.code;return json({error:m,...(code?{code}:{})},code==='ARCHIVE_RECONNECT_REQUIRED'?409:m==="Unauthorized"?401:400);
  }
 });
 

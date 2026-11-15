@@ -1,5 +1,5 @@
-import {showDocument} from './document-viewer.js?v=127';
-import {downloadDocument} from './document-download.js?v=119';
+import {showDocument} from './document-viewer.js?v=133';
+import {downloadDocument} from './document-download.js?v=133';
 import {buildAutomaticProjection,declarationNote} from './presence-draft-core.js?v=100';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 import {N153_WORKPLACES} from './workplaces.js?v=61';

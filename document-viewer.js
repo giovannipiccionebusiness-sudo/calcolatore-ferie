@@ -1,6 +1,6 @@
 let library;
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
-export async function showDocument(load,{name='Documento',context='',allowed=()=>true}={}){
+export async function showDocument(load,{name='Documento',context='',onReconnect=null,allowed=()=>true}={}){
  const previous=document.activeElement,dialog=el('dialog');dialog.className='document-viewer';dialog.setAttribute('aria-label',name);
  if(!document.getElementById('document-viewer-style')){const style=el('style');style.id='document-viewer-style';style.textContent=`
  .document-viewer{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));height:90dvh;max-height:90dvh;padding:0;border:0;border-radius:20px;background:#f4faf7;color:#173f3a;overflow:hidden}
@@ -58,6 +58,9 @@ export async function showDocument(load,{name='Documento',context='',allowed=()=
    const engine=await library;if(closed)return;engine.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.mjs';
    const data=await file.arrayBuffer();if(closed)return;pdf=await engine.getDocument({data, isEvalSupported:false}).promise;if(closed){pdf.destroy();return;}rotate.disabled=false;await render();
   }else status.textContent='Anteprima non disponibile per questo formato. Usa Scarica.';
- }catch(e){if(!closed)status.textContent='Impossibile aprire l’anteprima. '+(download.hidden?'Riprova.':'Puoi scaricare il documento.');}
+ }catch(e){if(!closed){
+   status.textContent=download.hidden?(e?.message||'Impossibile aprire l’anteprima. Riprova.'):'Anteprima non disponibile. Puoi scaricare il documento.';
+   if(e?.code==='ARCHIVE_RECONNECT_REQUIRED'&&typeof onReconnect==='function')button('Ricollega Google Drive','Rinnova il collegamento a Google Drive',async()=>{if(!allowed())return;try{await onReconnect();}catch(error){status.textContent=error.message||'Collegamento non riuscito. Riprova.';}});
+  }}
  return dialog;
 }

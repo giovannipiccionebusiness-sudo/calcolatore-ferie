@@ -1,4 +1,4 @@
-import {downloadDocument} from './document-download.js?v=119';
+import {downloadDocument} from './document-download.js?v=133';
 // Private, read-only worker archive. Supabase RLS remains authoritative.
 export function createWorkerArchive({client,getSession,allowed,openFile,typeLabel,stageLabel,statusLabel,renderScan=()=>{},onReset=()=>{},reviewDocument=()=>{}}){
  const $=id=>document.getElementById(id),pageSize=20;

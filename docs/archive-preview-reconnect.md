@@ -1,0 +1,7 @@
+# Ripristino accesso all'archivio Drive — 9.30
+
+Il 15 novembre l'apertura del documento archiviato `4ba9e29f-8bca-450c-82ae-9a87b3913a86` fallisce nel rinnovo del token Google con `invalid_grant`. Il collegamento memorizzato risale all'8 novembre. È necessaria una nuova autorizzazione Google; il codice non può rinnovare un refresh token rifiutato. La coincidenza con sette giorni è compatibile con un progetto OAuth in modalità Testing, ma lo stato della console Google non è stato verificato.
+
+Il backend distingue l'autorizzazione Drive scaduta dalla sessione dell'app (`409`, `ARCHIVE_RECONNECT_REQUIRED`). Lo stato dell'archivio controlla il rinnovo quando richiesto dall'amministratore senza restituire token. Il download mantiene questo errore se la copia originale è già stata rimossa da Supabase; continua a usare gli originali ancora disponibili durante l'archiviazione. Il visualizzatore spiega il problema e offre all'amministratore il pulsante Ricollega Google Drive, riutilizzando il normale flusso OAuth con controllo ruolo/sessione. Ai lavoratori non viene offerta un'azione amministrativa.
+
+Verifica: test del recupero bytes, fallback Storage, riconnessione richiesta, risposta legacy, rete e sessione; test del visualizzatore per messaggio, pulsante amministratore e cambio sessione; classificazione verificata sull'errore Google reale. Nessun documento o dato di presenza modificato. Il recupero effettivo dei file resta da verificare dopo che il titolare avrà riconfermato l'accesso Google.

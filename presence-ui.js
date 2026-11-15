@@ -1,5 +1,5 @@
-import {showDocument} from './document-viewer.js?v=127';
-import {downloadDocument} from './document-download.js?v=119';
+import {showDocument} from './document-viewer.js?v=133';
+import {downloadDocument} from './document-download.js?v=133';
 import {inlineVerification} from './presence-inline-core.js?v=112';
 import {declarationNote} from './presence-draft-core.js?v=100';
 import {prepareDeclaration} from './presence-acquire-core.js?v=99';

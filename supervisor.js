@@ -1,4 +1,4 @@
-import {showDocument} from './document-viewer.js?v=127';
+import {showDocument} from './document-viewer.js?v=133';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
 const labels={ferie:'Ferie',rol:'ROL',malattia:'Malattia',legge104:'Legge 104',congedo_parentale:'Congedo parentale'};
 const element=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};

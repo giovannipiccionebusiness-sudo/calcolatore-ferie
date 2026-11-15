@@ -1,5 +1,5 @@
-import {showDocument} from './document-viewer.js?v=127';
-import {downloadDocument} from './document-download.js?v=119';
+import {showDocument} from './document-viewer.js?v=133';
+import {downloadDocument} from './document-download.js?v=133';
 import {scanPDF} from './pdf-scan.js?v=35';
 import {cleanPaper} from './paper-clean.js?v=35';
 import {edgePaper} from './edge-crop.js?v=35';

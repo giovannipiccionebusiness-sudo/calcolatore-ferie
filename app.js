@@ -1,15 +1,15 @@
-import {createDriveOcrPilot} from './drive-ocr-ui.js?v=132';
-import {showDocument} from './document-viewer.js?v=131';
-import {downloadDocument} from './document-download.js?v=119';
+import {createDriveOcrPilot} from './drive-ocr-ui.js?v=133';
+import {showDocument} from './document-viewer.js?v=133';
+import {downloadDocument} from './document-download.js?v=133';
 import {createNotificationReport} from './notification-report.js?v=98';
-import {createSupervisor} from './supervisor.js?v=127';
+import {createSupervisor} from './supervisor.js?v=133';
 import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
-import {createPresenceConsole} from './presence-ui.js?v=127';
-import './app-version.js?v=132';
+import {createPresenceConsole} from './presence-ui.js?v=133';
+import './app-version.js?v=133';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
-import {createHourBudget} from './hour-budget-ui.js?v=127';
+import {createHourBudget} from './hour-budget-ui.js?v=133';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
 import {setupPasswordRecovery} from './password-recovery.js?v=59';
 import {createLeaveCalculator} from './leave-ui.js?v=57';
@@ -23,8 +23,8 @@ import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from '
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
-import {createWorkerArchive} from './archive.js?v=119';
-import {createAutoArchiveScanner} from './auto-scan.js?v=127';
+import {createWorkerArchive} from './archive.js?v=133';
+import {createAutoArchiveScanner} from './auto-scan.js?v=133';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=35';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
@@ -362,7 +362,7 @@ async function sendUploadDraft(draft){
 async function previewArchiveOriginal(d){return openFile(d);}
 async function openFile(d){
  const owner=session?.user?.id;
- const popup=await showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',context:['Sezione: '+(typeLabel[d.category]||d.category||'Documenti'),people.find(p=>p.id===d.worker_id)?.full_name||d.recipient_name||(d.worker_id===session?.user?.id?profile?.full_name:''),stageLabel[d.stage],d.month].filter(Boolean).join(' · '),allowed:()=>session?.user?.id===owner&&!!profile?.active});
+ const popup=await showDocument(()=>downloadDocument(sb,d,session?.access_token),{name:d.file_name||'Documento',context:['Sezione: '+(typeLabel[d.category]||d.category||'Documenti'),people.find(p=>p.id===d.worker_id)?.full_name||d.recipient_name||(d.worker_id===session?.user?.id?profile?.full_name:''),stageLabel[d.stage],d.month].filter(Boolean).join(' · '),onReconnect:adminAllowed()?()=>reconnectDrive():null,allowed:()=>session?.user?.id===owner&&!!profile?.active});
  if(popup?.open&&adminAllowed()&&d.worker_id==='60d6c259-e421-474b-9c5c-cc1d641e32d5'&&d.category==='presenze')popup.querySelector('nav').append(button('Confronta ore · prova OCR',()=>{popup.close();ocrPilot.openDocument(d);},true));
  return popup;
 }
@@ -520,17 +520,18 @@ async function driveCall(action,extra={}){
  const result=await response.json();if(response.status===401){finishLogout('Sessione scaduta. Accedi nuovamente.');throw new Error('Sessione scaduta. Accedi nuovamente.');}if(!response.ok)throw new Error(result.error||'Archivio Drive non disponibile.');
  return result;
 }
+async function reconnectDrive(){if(!adminAllowed())throw Error('Accedi come amministratore per ricollegare Drive.');const r=await driveCall('connect');location.assign(r.url);}
 async function refreshDrive(){
  if(profile?.role!=='admin'||!profile.active)return;
  if(!drivePanel){drivePanel=node('section');drivePanel.style.cssText='padding:18px;margin:16px 0;border:1px solid #ddd;border-radius:16px';$('adminOperations').prepend(drivePanel);}
  drivePanel.replaceChildren(node('h3','Archivio Google Drive'));
  const summary=node('p','Verifica del collegamento…'),controls=node('div',null,'doc-toolbar'),list=node('div');drivePanel.append(summary,controls,list);
  try{
-  const result=await driveCall('status');
-  summary.textContent=!result.configured?'Configurazione OAuth da completare nel backend.':!result.connection?'Google Drive non ancora collegato.':'Account Google registrato. Se l’archiviazione si blocca, usa Ricollega Google Drive con lo stesso account.';
+  const result=await driveCall('status',{check_connection:true});
+  summary.textContent=!result.configured?'Configurazione OAuth da completare nel backend.':!result.connection?'Google Drive non ancora collegato.':result.connectionError?result.connectionError:'Account Google registrato. Se l’archiviazione si blocca, usa Ricollega Google Drive con lo stesso account.';
   if(result.configured){
    controls.append(button(result.connection?'Ricollega Google Drive':'Collega Google Drive',async()=>{
-    try{const r=await driveCall('connect');location.assign(r.url)}catch(e){err(e)}
+    try{await reconnectDrive()}catch(e){err(e)}
    }));
   }
   controls.append(button('Aggiorna stato',()=>refreshDrive(),true));
