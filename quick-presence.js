@@ -1,5 +1,5 @@
 import {SUPABASE_URL,SUPABASE_ANON_KEY} from './config.js';
-import {showDocument} from './document-viewer.js?v=137';
+import {showDocument} from './document-viewer.js?v=140';
 import {downloadDocument} from './document-download.js?v=133';
 import {rosterRows,presenceFiles,consultationKey} from './quick-presence-core.js?v=137';
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};

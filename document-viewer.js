@@ -2,14 +2,15 @@ let library;
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
 export async function showDocument(load,{name='Documento',context='',onReconnect=null,navigation=null,onOpen=null,allowed=()=>true}={}){
  const previous=document.activeElement,dialog=el('dialog');dialog.className='document-viewer';dialog.setAttribute('aria-label',name);
- if(!document.getElementById('document-viewer-style')){const style=el('style');style.id='document-viewer-style';style.textContent=`
+ if(!document.getElementById('document-viewer-style-v140')){const style=el('style');style.id='document-viewer-style-v140';style.textContent=`
  .document-viewer{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));height:90dvh;max-height:90dvh;padding:0;border:0;border-radius:20px;background:#f4faf7;color:#173f3a;overflow:hidden}
- .document-viewer[open]{display:flex;flex-direction:column}.document-viewer::backdrop{background:#102d32aa}
+ .document-viewer[open]{display:flex;flex-direction:column;overflow:hidden!important}
+ html:has(.document-viewer[open]),body:has(.document-viewer[open]){overflow:hidden!important;overscroll-behavior:none}.document-viewer::backdrop{background:#102d32aa}
  .document-viewer header{display:flex;align-items:center;gap:12px;padding:14px;background:white;flex-shrink:0}.document-viewer-heading{flex:1;min-width:0}.document-viewer-context{margin:6px 0 0;color:#126358;font:600 14px system-ui;line-height:1.45;overflow-wrap:anywhere}.document-viewer h2{font:700 18px system-ui;margin:0;flex:1;overflow-wrap:anywhere}
  .document-viewer button,.document-viewer a{box-sizing:border-box;min-height:44px;border:1px solid #b6d7cf;border-radius:10px;padding:8px 12px;background:#fff;color:#08695d;font:600 16px system-ui;cursor:pointer;text-decoration:none}
  .document-viewer button:disabled{opacity:.45}.document-viewer nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border-bottom:1px solid #cadfd8;flex-shrink:0}
- .document-viewer output{font:14px system-ui}.document-viewer-viewport{overflow:auto;min-height:0;flex:1;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom;background:#dfe8e5;padding:8px}
- .document-viewer-surface{width:max-content;min-width:100%;display:flex;justify-content:center;align-items:flex-start}
+ .document-viewer output{font:14px system-ui}.document-viewer>.document-viewer-viewport{box-sizing:border-box;overflow-x:auto!important;overflow-y:scroll!important;min-height:0!important;min-width:0;height:0;flex:1 1 0!important;scrollbar-gutter:stable;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom;background:#dfe8e5;padding:8px}
+ .document-viewer-surface{height:max-content;flex:none;width:max-content;min-width:100%;display:flex;justify-content:center;align-items:flex-start}
  .document-viewer-surface img,.document-viewer-surface canvas{display:block;max-width:none!important;max-height:none!important;flex-shrink:0;background:white}
  .document-viewer-status{padding:0 14px;margin:6px 0;font:14px system-ui}
  `;document.head.append(style);}
@@ -25,7 +26,7 @@ export async function showDocument(load,{name='Documento',context='',onReconnect
  const next=button('›','Pagina successiva',()=>{pageNumber++;render();});
  const download=el('a','Scarica');download.hidden=true;download.download=name;nav.append(download);
  const status=el('p','Caricamento documento…');status.className='document-viewer-status';status.setAttribute('role','status');
- const viewport=el('div'),surface=el('div');viewport.className='document-viewer-viewport';surface.className='document-viewer-surface';viewport.append(surface);
+ const viewport=el('div'),surface=el('div');viewport.className='document-viewer-viewport';viewport.tabIndex=0;viewport.setAttribute('role','region');viewport.setAttribute('aria-label','Foglio documento: scorri per leggere');surface.className='document-viewer-surface';viewport.append(surface);
  dialog.append(head,nav);if(navigation)dialog.append(navigation);dialog.append(status,viewport);document.body.append(dialog);dialog.showModal();close.focus();onOpen?.(dialog);
  const controls=()=>{percent.textContent=Math.round(zoom*100)+'%';minus.disabled=zoom<=.5;plus.disabled=zoom>=4;prev.hidden=next.hidden=pages.hidden=!pdf;prev.disabled=pageNumber<=1;next.disabled=!pdf||pageNumber>=pdf.numPages;pages.textContent=pdf?pageNumber+' / '+pdf.numPages:'';};
  function resize(value){zoom=Math.max(.5,Math.min(4,value));controls();if(image?.naturalWidth){renderImage();}else if(pdf)render();}
