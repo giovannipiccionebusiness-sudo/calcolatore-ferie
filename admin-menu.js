@@ -106,7 +106,7 @@ function setup(){
  `;document.head.append(style);
  hub=el('section',null,'admin-hub');home=el('div');const heading=el('h2','Il tuo pannello');heading.tabIndex=-1;home.append(heading,el('p','Scegli cosa vuoi consultare.'));priorities=el('div',null,'admin-priorities');home.append(priorities);
  const areas=[
- ['Presenze e budget','Ore lavorate, supplementare e costi',['presence','sitebudget','declarations']],
+ ['Presenze e budget','Ore lavorate, supplementare e costi',['quickpresence','presence','sitebudget','declarations','ocr']],
  ['Documenti e ferie','Richieste, saldi e consegne',['documents','balances','deliveries']],
  ['Lavoratori e turni','Anagrafiche e organizzazione del servizio',['workers','shifts']],
  ['Comunicazioni','Messaggi, promemoria e notifiche',['messages','notifications','missing']],
