@@ -29,8 +29,16 @@ export function historyEvidence(balances,entries=[],config={}){
  let proposal=config.proposal||null;if(!proposal&&supported.length>=2){const last=supported.slice(-3);if(['ferie','rol'].every(k=>last.every(x=>dec(x[k]).gt(0)&&dec(x[k]).minus(last[0][k]).abs().lte('0.005'))))proposal={ferie:last[0].ferie,rol:last[0].rol,source:'Storico con utilizzi riconciliati: '+last.map(x=>x.to).join(', ')};}
  return {comparisons,proposal,status:proposal?'Proposta da confermare':'Da verificare',gaps:comparisons.filter(x=>x.months>1)};
 }
+// The closed payroll report supersedes earlier dated commitments; never infer dates from a photo/month.
+export function reconcileReport(data){
+ const base=[...(data.balances||[])].sort((a,b)=>b.period.localeCompare(a.period))[0];
+ if(!base)return data;date(base.period);
+ const entries=(data.entries||[]).map(entry=>entry.state!=='cancelled'&&entry.day<=base.period?{...entry,included_in_report:base.period,automatically_covered:true}:entry);
+ return {...data,entries,coverage:{through:base.period,count:entries.filter(e=>e.automatically_covered).length}};
+}
 export function project(data,input){
- const balances=data.balances||[],base=[...balances].sort((a,b)=>b.period.localeCompare(a.period))[0];if(!base)throw Error('Saldo individuale non ancora disponibile');const c=data.config||{};if(c.expectancy_required&&!(c.expectancies||[]).length)throw Error('Aspettativa da verificare: inserire date e regole di maturazione');validateConfig(c);date(input.start);date(input.end);if(input.start<=base.period)throw Error('Scegli una partenza successiva al saldo del report');if((data.unreconciled||[]).length)throw Error('Sono presenti richieste autorizzate ancora da riconciliare dal responsabile');
+ data=reconcileReport(data);
+ const balances=data.balances||[],base=[...balances].sort((a,b)=>b.period.localeCompare(a.period))[0];if(!base)throw Error('Saldo individuale non ancora disponibile');const c=data.config||{};if(c.expectancy_required&&!(c.expectancies||[]).length)throw Error('Aspettativa da verificare: inserire date e regole di maturazione');validateConfig(c);date(input.start);date(input.end);if(input.start<=base.period)throw Error('Scegli una partenza successiva al saldo del report');if((data.unreconciled||[]).length)throw Error('Il responsabile deve completare date e ore delle richieste autorizzate prive di dati strutturati');
  const requested=quantities(c,input.start,input.end,input.kind,input.dailyHours),maturity={ferie:dec(0),rol:dec(0)},months=[];
  let current=new Date(Date.UTC(Number(base.period.slice(0,4)),Number(base.period.slice(5,7)),1,12));const limit=input.start.slice(0,7)+'-01';
  for(;iso(current)<limit;current.setUTCMonth(current.getUTCMonth()+1)){if(months.length>60)throw Error('Proiezione massima di cinque anni');const first=iso(current),last=monthEnd(first.slice(0,7)),rate=versionFor(c.rates,first);if(!rate?.confirmed)throw Error('Maturazione individuale da verificare per '+first.slice(0,7));const row={month:first.slice(0,7)};

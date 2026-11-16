@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {project,historyEvidence,validateConfig,quantities,dec} from '../leave-core.js';
+import {project,historyEvidence,validateConfig,quantities,dec,reconcileReport} from '../leave-core.js';
 const config={rates:[{from:'2026-10-01',ferie:'1.83',rol:'0.41',confirmed:true}],schedules:[{from:'2026-10-01',hours:['4','4','4','4','4','4','0'],weekly_hours:'24',ferie_day_hours:'4',rol_day_hours:'4',confirmed:true}],expectancies:[]};
 const base={balances:[{period:'2026-09-30',ferie:'10.123456789012345',rol:'3.000000000000001',ex_festivita:'0.123456789012345'}],config,entries:[],unreconciled:[]};
 const input={start:'2026-12-14',end:'2026-12-19',kind:'ferie'};
@@ -13,8 +13,8 @@ c.expectancies[0].end='2026-10-15';r=project({...base,config:c},{start:'2026-11-
 c.expectancies[0].method='any_overlap_stop';assert.equal(project({...base,config:c},{start:'2026-11-02',end:'2026-11-02',kind:'ferie'}).kinds.ferie.accrual,'0');
 assert.throws(()=>project({...base,config:{...config,expectancy_required:true}},input),/Aspettativa/);
 assert.throws(()=>project({...base,config:{...config,rates:[]}},input),/Maturazione/);
-assert.throws(()=>project({...base,unreconciled:[{id:'fake'}]},input),/riconciliare/);
-assert.throws(()=>project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'approved'}]},input),/precedente al nuovo report/);
+assert.throws(()=>project({...base,unreconciled:[{id:'fake'}]},input),/date e ore/);
+assert.equal(project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'approved'}]},input).kinds.ferie.committed,'0');
 assert.equal(project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'used'}]},input).kinds.ferie.used,'0');
 assert.equal(project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'approved',included_in_report:'2026-09-30'}]},input).kinds.ferie.committed,'0');
 r=project({...base,balances:[{...base.balances[0],rol:'-2'}]},{start:'2026-10-15',end:'2026-10-15',kind:'rol',dailyHours:'2'});assert.equal(r.sufficient,false);assert.equal(r.kinds.rol.missing,'2.5');assert.equal(r.kinds.ferie.requested,'0');
@@ -25,3 +25,16 @@ const history=[{period:'2026-06-30',ferie:'0',rol:'0'},{period:'2026-08-31',feri
 const flat=[{period:'2026-07-31',ferie:'1',rol:'1'},{period:'2026-08-31',ferie:'1',rol:'1'},{period:'2026-09-30',ferie:'1',rol:'1'}];assert.equal(historyEvidence(flat,[],{reconciled_months:['2026-08','2026-09']}).proposal,null);
 const stable=[{period:'2026-07-31',ferie:'1',rol:'1'},{period:'2026-08-31',ferie:'2.83',rol:'1.41'},{period:'2026-09-30',ferie:'4.66',rol:'1.82'}];assert.equal(historyEvidence(stable).proposal,null);assert.equal(historyEvidence(stable,[],{reconciled_months:['2026-08','2026-09']}).proposal.ferie,'1.83');
 console.log('PASS exact decimal balances; 6-day schedule; report-day/hour conversion; ROL separation; completed-month prudence; missing months; cross-year; leave suspension; negative balances; imported coverage and overlapping commitments; no unsupported automatic accrual');
+
+// A cross-month request is split by day, including the closing day itself.
+const dated={...base,balances:[{...base.balances[0],period:'2026-10-31'}],entries:[{day:'2026-10-30',kind:'ferie',quantity:'1',state:'approved'},{day:'2026-10-31',kind:'rol',quantity:'0.5',state:'approved'},{day:'2026-11-02',kind:'ferie',quantity:'1',state:'approved'},{day:'2026-11-03',kind:'rol',quantity:'0.5',state:'used'},{day:'2026-11-04',kind:'ferie',quantity:'8',state:'cancelled'}]};
+const original=JSON.stringify(dated),automatic=reconcileReport(dated);
+assert.equal(automatic.coverage.count,2);assert.equal(JSON.stringify(dated),original);
+assert.deepEqual(reconcileReport(automatic),automatic);
+r=project(dated,input);assert.equal(r.kinds.ferie.committed,'1');assert.equal(r.kinds.rol.used,'0.5');
+const next={...dated,balances:[...dated.balances,{...dated.balances[0],period:'2026-11-30'}]};
+r=project(next,input);assert.equal(r.kinds.ferie.committed,'0');assert.equal(r.kinds.rol.used,'0');
+// Missing dates must not disappear just because the upload references a covered month.
+assert.throws(()=>project({...dated,unreconciled:[{id:'photo',month:'2026-10'}]},input),/date e ore/);
+assert.equal(reconcileReport({...dated,balances:[dated.balances[0],{...base.balances[0]}]}).coverage.through,'2026-10-31');
+console.log('PASS automatic report cutoff, closing day, cross-month requests, new report, no duplicate subtraction, immutable/idempotent reconciliation, undated photo exception');

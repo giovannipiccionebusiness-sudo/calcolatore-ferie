@@ -1,9 +1,9 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.49.10';
-import {dec,date,monthEnd,validateConfig,quantities,historyEvidence,project} from './leave-core.js';
+import {dec,date,monthEnd,validateConfig,quantities,historyEvidence,project,reconcileReport} from './leave-core.js';
 const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
 const headers={'Access-Control-Allow-Origin':'https://giovannipiccionebusiness-sudo.github.io','Access-Control-Allow-Headers':'authorization, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS','Content-Type':'application/json'};
 const reply=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
-async function snapshot(actor:string,key:string){const {data,error}=await db.rpc('leave_snapshot',{actor,key});if(error)throw error;if(!data)throw Error('Saldi non disponibili');return {...data,evidence:historyEvidence(data.balances,data.entries,data.config)};}
+async function snapshot(actor:string,key:string){const {data,error}=await db.rpc('leave_snapshot',{actor,key});if(error)throw error;if(!data)throw Error('Saldi non disponibili');return {...reconcileReport(data),evidence:historyEvidence(data.balances,data.entries,data.config)};}
 Deno.serve(async req=>{
  if(req.method==='OPTIONS')return new Response('',{headers});if(req.method!=='POST')return reply({error:'Metodo non consentito'},405);
  try{
