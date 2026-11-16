@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {syncConsultations,saveConsultation,remoteMarkKey} from '../consultation-store.js';
+import {consultationKey} from '../quick-presence-core.js';
+const remote=new Map();let fail=false;
+const api={from:()=>{const query={select:()=>query,eq:()=>query,order:()=>query,range:async()=>({data:[...remote.values()]}),upsert:async row=>{if(fail)return {error:Error('offline')};remote.set(remoteMarkKey(row.document_id,row.period_key),row);return {error:null};}};return query;}};
+const worker={id:'a',account_id:'a'},doc={id:'doc1',worker_id:'a',month:'2026-11',stage:'weekly',week_ending:'2026-11-13',created_at:'2026-11-13T12:00:00Z'},local=new Map();local.set(consultationKey('admin','2026-11','a',doc),'1');
+const oldPc={getItem:k=>local.get(k)},phone={getItem:()=>null};
+let result=await syncConsultations(api,'admin',[doc],[worker],'2026-11',oldPc);assert.equal(result.migrated,1);assert(result.marks.has('doc1:2026-11-13'));
+result=await syncConsultations(api,'admin',[doc],[worker],'2026-11',phone);assert.equal(result.migrated,0);assert(result.marks.has('doc1:2026-11-13'));
+result=await syncConsultations(api,'admin',[doc],[worker],'2026-11',oldPc);assert.equal(result.migrated,0);assert.equal(remote.size,1);
+assert.equal(result.marks.has('doc1:2026-11-06'),false);assert.equal(result.marks.has('replacement:2026-11-13'),false);
+fail=true;await assert.rejects(()=>saveConsultation(api,'admin',{...doc,id:'new'},'2026-11-13'),/offline/);assert.equal(remote.size,1);
+let stopped=true;await assert.rejects(()=>syncConsultations(api,'admin',[doc],[worker],'2026-11',oldPc,()=>{if(stopped)throw Error('session changed');}),/session changed/);
+console.log('PASS old PC migration, phone recovery, duplicate-safe reload, weekly/replacement isolation, failed saves and session guard');

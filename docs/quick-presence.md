@@ -4,8 +4,15 @@ Accesso: amministratore → Pannello → Consultazione rapida presenze. Sceglier
 
 Apertura diretta dell'ultimo foglio del mese esatto; precedenza al definitivo mensile, poi caricamenti più recenti. Esclusi respinti e file sostituiti da un invio valido. Gli altri caricamenti si scelgono nel visualizzatore. I lavoratori importati senza account rimangono nell'elenco; i documenti delegati sono associati tramite recipient_person_key. Un mese senza file mostra Foglio mancante, senza ripiegare su altri mesi.
 
-Precedente, Successivo e Segna consultato e passa al successivo sono sempre disponibili sopra il documento, insieme a cognome, nome, matricola, CDC e mese. Zoom, rotazione, download e pagine PDF riutilizzano il visualizzatore privato. A fine elenco si rimane sull'ultimo lavoratore. Consultato non cambia verifiche, approvazioni o dati di presenza. Il promemoria locale è separato per amministratore, mese, lavoratore e file; un nuovo file non eredita il segno precedente. I dati visualizzati vengono rimossi al logout.
+Precedente, Successivo e Segna consultato e passa al successivo sono sempre disponibili sopra il documento, insieme a cognome, nome, matricola, CDC e mese. Zoom, rotazione, download e pagine PDF riutilizzano il visualizzatore privato. A fine elenco si rimane sull'ultimo lavoratore. Consultato non cambia verifiche, approvazioni o dati di presenza. Il promemoria viene salvato online nella tabella presence_consultations ed è separato per amministratore, documento e settimana (o definitivo). È visibile dallo stesso account sui diversi dispositivi dopo Carica / aggiorna; un nuovo file non eredita il segno precedente. I dati visualizzati vengono rimossi al logout.
 
 Sicurezza: sole richieste autenticate, lista matricole da attendance_roster (già limitata agli amministratori), documenti soggetti alle RLS e download Drive privato esistente. Nessuna modifica a schema, permessi o salvataggi presenze. La selezione invalida il visualizzatore precedente; i risultati tardivi e i cambi sessione non possono ripopolare la sezione.
 
 Verifiche: tests/quick-presence.test.mjs, tests/quick-presence.dom.cjs, tests/document-viewer-reconnect.test.cjs. DOM test con linkedom 0.18.12. Verifica visiva su computer affiancato da completare con l'utente.
+
+
+## Sincronizzazione dalla versione 9.40
+
+Premere Carica / aggiorna sul browser del PC usato per le vecchie spunte. Le chiavi locali del mese caricato (sia nel vecchio formato mensile sia in quello settimanale) vengono associate al documento e alla settimana effettivi e trasferite online senza duplicati. Nessuna cancellazione del dato locale; ripetere per altri mesi da recuperare. Sul telefono usare lo stesso account e premere Carica / aggiorna. Senza riaprire quel browser del PC non è possibile leggere le vecchie spunte locali.
+
+La nuova conferma attende l'esito online prima di avanzare. In caso di errore resta sul lavoratore e mostra Riprova salvataggio. Lo stato online è autorevole; il backup locale serve al recupero, non a fingere sincronizzazione. I caricamenti RLS, la settimana e l'identità amministratore sono controllati sul database. Non sono concessi UPDATE o DELETE ai client. SQL tests su dati reali interamente in transazione ROLLBACK; nessuna spunta di produzione creata dai test.
