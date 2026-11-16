@@ -37,7 +37,8 @@ export function reconcileReport(data){
  return {...data,entries,coverage:{through:base.period,count:entries.filter(e=>e.automatically_covered).length}};
 }
 export function project(data,input){
- data=reconcileReport(data);
+ // Only imported balances and configured accrual feed the simulation. Requests never change them.
+ data={...data,entries:[],unreconciled:[]};
  const balances=data.balances||[],base=[...balances].sort((a,b)=>b.period.localeCompare(a.period))[0];if(!base)throw Error('Saldo individuale non ancora disponibile');const c=data.config||{};if(c.expectancy_required&&!(c.expectancies||[]).length)throw Error('Aspettativa da verificare: inserire date e regole di maturazione');validateConfig(c);date(input.start);date(input.end);if(input.start<=base.period)throw Error('Scegli una partenza successiva al saldo del report');if((data.unreconciled||[]).length)throw Error('Il responsabile deve completare date e ore delle richieste autorizzate prive di dati strutturati');
  const requested=quantities(c,input.start,input.end,input.kind,input.dailyHours),maturity={ferie:dec(0),rol:dec(0)},months=[];
  let current=new Date(Date.UTC(Number(base.period.slice(0,4)),Number(base.period.slice(5,7)),1,12));const limit=input.start.slice(0,7)+'-01';

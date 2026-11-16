@@ -4,8 +4,8 @@ const config={rates:[{from:'2026-10-01',ferie:'1.83',rol:'0.41',confirmed:true}]
 const base={balances:[{period:'2026-09-30',ferie:'10.123456789012345',rol:'3.000000000000001',ex_festivita:'0.123456789012345'}],config,entries:[],unreconciled:[]};
 const input={start:'2026-12-14',end:'2026-12-19',kind:'ferie'};
 let r=project(base,input);assert.equal(r.gross,'6');assert.equal(r.kinds.ferie.accrual,'3.66');assert.equal(r.kinds.ferie.residual,'7.783456789012345');assert.equal(r.exFestivita,'0.123456789012345');
-r=project({...base,entries:[{day:'2026-10-01',kind:'ferie',quantity:'1',state:'used'},{day:'2027-01-11',kind:'ferie',quantity:'2',state:'approved'}]},input);assert.equal(r.kinds.ferie.residual,'4.783456789012345');
-r=project({...base,entries:[{day:'2026-12-15',kind:'ferie',quantity:'1',state:'approved'}]},input);assert.equal(r.additional,'5');assert.equal(r.kinds.ferie.residual,'7.783456789012345');
+r=project({...base,entries:[{day:'2026-10-01',kind:'ferie',quantity:'1',state:'used'},{day:'2027-01-11',kind:'ferie',quantity:'2',state:'approved'}]},input);assert.equal(r.kinds.ferie.residual,'7.783456789012345');
+r=project({...base,entries:[{day:'2026-12-15',kind:'ferie',quantity:'1',state:'approved'}]},input);assert.equal(r.additional,'6');assert.equal(r.kinds.ferie.residual,'7.783456789012345');
 assert.equal(project(base,{start:'2026-10-15',end:'2026-10-15',kind:'ferie'}).months.length,0);
 assert.equal(project(base,{start:'2027-01-04',end:'2027-01-05',kind:'ferie'}).kinds.ferie.accrual,'5.49');
 let c=structuredClone(config);c.expectancies=[{start:'2026-10-01',end:'2026-10-31',ferie:false,rol:true,method:'calendar_prorata'}];r=project({...base,config:c},{start:'2026-11-02',end:'2026-11-02',kind:'ferie'});assert.equal(r.kinds.ferie.accrual,'0');assert.equal(r.kinds.rol.accrual,'0.41');
@@ -13,7 +13,7 @@ c.expectancies[0].end='2026-10-15';r=project({...base,config:c},{start:'2026-11-
 c.expectancies[0].method='any_overlap_stop';assert.equal(project({...base,config:c},{start:'2026-11-02',end:'2026-11-02',kind:'ferie'}).kinds.ferie.accrual,'0');
 assert.throws(()=>project({...base,config:{...config,expectancy_required:true}},input),/Aspettativa/);
 assert.throws(()=>project({...base,config:{...config,rates:[]}},input),/Maturazione/);
-assert.throws(()=>project({...base,unreconciled:[{id:'fake'}]},input),/date e ore/);
+assert.deepEqual(project({...base,unreconciled:[{id:'fake'}]},input),project(base,input));
 assert.equal(project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'approved'}]},input).kinds.ferie.committed,'0');
 assert.equal(project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'used'}]},input).kinds.ferie.used,'0');
 assert.equal(project({...base,entries:[{day:'2026-09-25',kind:'ferie',quantity:'1',state:'approved',included_in_report:'2026-09-30'}]},input).kinds.ferie.committed,'0');
@@ -31,10 +31,13 @@ const dated={...base,balances:[{...base.balances[0],period:'2026-10-31'}],entrie
 const original=JSON.stringify(dated),automatic=reconcileReport(dated);
 assert.equal(automatic.coverage.count,2);assert.equal(JSON.stringify(dated),original);
 assert.deepEqual(reconcileReport(automatic),automatic);
-r=project(dated,input);assert.equal(r.kinds.ferie.committed,'1');assert.equal(r.kinds.rol.used,'0.5');
+r=project(dated,input);assert.equal(r.kinds.ferie.committed,'0');assert.equal(r.kinds.rol.used,'0');
 const next={...dated,balances:[...dated.balances,{...dated.balances[0],period:'2026-11-30'}]};
 r=project(next,input);assert.equal(r.kinds.ferie.committed,'0');assert.equal(r.kinds.rol.used,'0');
 // Missing dates must not disappear just because the upload references a covered month.
-assert.throws(()=>project({...dated,unreconciled:[{id:'photo',month:'2026-10'}]},input),/date e ore/);
+assert.deepEqual(project({...dated,unreconciled:[{id:'photo',month:'2026-10'}]},input),project({...dated,entries:[]},input));
 assert.equal(reconcileReport({...dated,balances:[dated.balances[0],{...base.balances[0]}]}).coverage.through,'2026-10-31');
 console.log('PASS automatic report cutoff, closing day, cross-month requests, new report, no duplicate subtraction, immutable/idempotent reconciliation, undated photo exception');
+
+assert.deepEqual(project({...base,entries:[{day:input.start,kind:"ferie",quantity:"999",state:"approved"}],unreconciled:[{id:"pending"}]},input),project(base,input));
+console.log("PASS report-only calculation: requests, recorded absences and pending documents never change balances or block simulation");
