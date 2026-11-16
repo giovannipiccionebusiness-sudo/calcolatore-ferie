@@ -1,3 +1,4 @@
+import {createQuickPresence} from './quick-presence.js?v=137';
 import {createDriveOcrPilot} from './drive-ocr-ui.js?v=133';
 import {showDocument} from './document-viewer.js?v=133';
 import {downloadDocument} from './document-download.js?v=133';
@@ -7,7 +8,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=133';
-import './app-version.js?v=136';
+import './app-version.js?v=137';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=133';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';
@@ -19,7 +20,7 @@ import {setupOpenedPushNotice} from './push-open-notice.js?v=107';
 import {createAdminMessages} from './admin-messages.js?v=106';
 import {createPushControls} from './push-notifications.js?v=111';
 import {openDocumentCamera} from './live-camera.js?v=60';
-import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from './admin-menu.js?v=132';
+import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from './admin-menu.js?v=137';
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
@@ -123,7 +124,7 @@ function showUploadProgress(text,percent=null,completed=false,failed=false){
  uploadStatusPanel.setAttribute('aria-busy',String(!completed&&!failed));
 }
 
-function showLogged(on){if(on)queueMicrotask(()=>document.dispatchEvent(new Event('app-session-ready')));accountMenu.refresh(on);if(!on){supervisor.clear();notificationReport.clear();resetAdminMenu();}queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();ocrPilot.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
+function showLogged(on){if(on)queueMicrotask(()=>document.dispatchEvent(new Event('app-session-ready')));accountMenu.refresh(on);if(!on){supervisor.clear();notificationReport.clear();resetAdminMenu();}queueMicrotask(()=>{if(!on){weekChanges.clear();dailyPresence.clear();adminShifts.clear();}supervisor.refresh();pushControls.refresh();adminMessages.refresh();notificationCenter.refresh();leaveCalculator.refresh();hourBudget.refresh();ocrPilot.refresh();presenceConsole.refresh();colleagueUpload.refresh();});if(!on)resetWorkerMenu();if(!on||profile?.role!=='admin'||!profile?.active){archive.clear();quickPresence.clear();automaticScans.clear();multiPage.clear();}$('authArea').classList.toggle('hidden',on);$('loggedArea').classList.toggle('hidden',!on);$('workerArea').classList.toggle('hidden',!on||!profile?.active||profile.role==='admin');$('adminArea').classList.toggle('hidden',!on||!profile?.active||profile.role!=='admin');}
 const passwordRecovery=setupPasswordRecovery({getClient:()=>authClient,onComplete:async()=>{session=null;profile=null;await reloadAccount();},notice:appNotice});
 async function boot(){if(!configured){$('setupAlert').textContent='Configurazione mancante: apri INSTALLAZIONE.md. I documenti NON vengono inviati.';showLogged(false);$('loginBtn').disabled=true;$('signupBtn').disabled=true;return}
  authClient=createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
@@ -616,9 +617,10 @@ async function monthlyStatus(action,document_id){
 }
 const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
 const automaticScans=createAutoArchiveScanner({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openOriginal:previewArchiveOriginal,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
+const quickPresence=createQuickPresence({client:()=>sb,getSession:()=>session,allowed:adminAllowed,onReconnect:()=>reconnectDrive()});
 const archive=createWorkerArchive({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
 const refreshAdminArchive=refreshAdmin;
-refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);notificationCenter.refresh(true);}}};
+refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);quickPresence.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);notificationCenter.refresh(true);}}};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
 const adminMessages=createAdminMessages({getSession:()=>session,getProfile:()=>profile,openSettings:()=>notificationCenter.openSettings()});
 const colleagueUpload=createColleagueUpload({getSession:()=>session,getProfile:()=>profile,getClient:()=>sb});

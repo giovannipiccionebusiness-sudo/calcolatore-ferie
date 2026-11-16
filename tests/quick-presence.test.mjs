@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {rosterRows,presenceFiles,consultationKey} from '../quick-presence-core.js';
+const people=rosterRows([{id:'a',full_name:'Anna Maria Paladini',role:'worker',site:'N153'},{id:'b',full_name:'Olanda Parabita',role:'worker',site:'N153'}],[{person_key:'D:1',account_id:'a',surname:'PALADINI',given_name:'ANNA MARIA',matricola:'1',site:'N153'},{person_key:'D:3',account_id:null,surname:'ANNUNZIATA',given_name:'DONATELLO',matricola:'3',site:'N153'}]);
+assert.deepEqual(people.map(p=>p.surname),['ANNUNZIATA','PALADINI','Parabita']);assert.equal(people.length,3);
+const worker=people[1],doc=(id,extra={})=>({id,worker_id:'a',category:'presenze',month:'2026-11',stage:'weekly',review_status:'verified',created_at:'2026-11-13',...extra});
+const documents=[doc('old'),doc('replace',{replaces:'old',created_at:'2026-11-14'}),doc('final',{stage:'final',created_at:'2026-11-12'}),doc('reject',{review_status:'rejected'}),doc('next',{month:'2026-12'}),doc('other',{worker_id:'b'}),doc('ferie',{category:'ferie'})];
+assert.deepEqual(presenceFiles(documents,worker,'2026-11').map(d=>d.id),['final','replace']);assert.deepEqual(presenceFiles(documents,worker,'2025-11'),[]);
+assert.equal(presenceFiles([doc('delegated',{worker_id:null,recipient_person_key:'D:3'})],people[0],'2026-11').length,1);
+assert.notEqual(consultationKey('admin','2026-11','a',doc('old')),consultationKey('admin','2026-11','a',doc('new')));assert.notEqual(consultationKey('admin','2026-11','a',doc('old')),consultationKey('other','2026-11','a',doc('old')));
+console.log('PASS surname roster, imported workers without accounts, final priority, replacement chain, rejected documents, month isolation, delegation and consultation isolation');

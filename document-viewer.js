@@ -1,6 +1,6 @@
 let library;
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;return n;};
-export async function showDocument(load,{name='Documento',context='',onReconnect=null,allowed=()=>true}={}){
+export async function showDocument(load,{name='Documento',context='',onReconnect=null,navigation=null,onOpen=null,allowed=()=>true}={}){
  const previous=document.activeElement,dialog=el('dialog');dialog.className='document-viewer';dialog.setAttribute('aria-label',name);
  if(!document.getElementById('document-viewer-style')){const style=el('style');style.id='document-viewer-style';style.textContent=`
  .document-viewer{box-sizing:border-box;width:min(1100px,calc(100vw - 24px));height:90dvh;max-height:90dvh;padding:0;border:0;border-radius:20px;background:#f4faf7;color:#173f3a;overflow:hidden}
@@ -26,7 +26,7 @@ export async function showDocument(load,{name='Documento',context='',onReconnect
  const download=el('a','Scarica');download.hidden=true;download.download=name;nav.append(download);
  const status=el('p','Caricamento documento…');status.className='document-viewer-status';status.setAttribute('role','status');
  const viewport=el('div'),surface=el('div');viewport.className='document-viewer-viewport';surface.className='document-viewer-surface';viewport.append(surface);
- dialog.append(head,nav,status,viewport);document.body.append(dialog);dialog.showModal();close.focus();
+ dialog.append(head,nav);if(navigation)dialog.append(navigation);dialog.append(status,viewport);document.body.append(dialog);dialog.showModal();close.focus();onOpen?.(dialog);
  const controls=()=>{percent.textContent=Math.round(zoom*100)+'%';minus.disabled=zoom<=.5;plus.disabled=zoom>=4;prev.hidden=next.hidden=pages.hidden=!pdf;prev.disabled=pageNumber<=1;next.disabled=!pdf||pageNumber>=pdf.numPages;pages.textContent=pdf?pageNumber+' / '+pdf.numPages:'';};
  function resize(value){zoom=Math.max(.5,Math.min(4,value));controls();if(image?.naturalWidth){renderImage();}else if(pdf)render();}
  function renderImage(){
