@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {rosterRows,presenceFiles,consultationKey} from '../quick-presence-core.js';
+import {rosterRows,presenceFiles,consultationKey,weekKey,weekLabel,weeksForMonth} from '../quick-presence-core.js';
 const people=rosterRows([{id:'a',full_name:'Anna Maria Paladini',role:'worker',site:'N153'},{id:'b',full_name:'Olanda Parabita',role:'worker',site:'N153'}],[{person_key:'D:1',account_id:'a',surname:'PALADINI',given_name:'ANNA MARIA',matricola:'1',site:'N153'},{person_key:'D:3',account_id:null,surname:'ANNUNZIATA',given_name:'DONATELLO',matricola:'3',site:'N153'}]);
 assert.deepEqual(people.map(p=>p.surname),['ANNUNZIATA','PALADINI','Parabita']);assert.equal(people.length,3);
 const worker=people[1],doc=(id,extra={})=>({id,worker_id:'a',category:'presenze',month:'2026-11',stage:'weekly',review_status:'verified',created_at:'2026-11-13',...extra});
@@ -8,3 +8,14 @@ assert.deepEqual(presenceFiles(documents,worker,'2026-11').map(d=>d.id),['final'
 assert.equal(presenceFiles([doc('delegated',{worker_id:null,recipient_person_key:'D:3'})],people[0],'2026-11').length,1);
 assert.notEqual(consultationKey('admin','2026-11','a',doc('old')),consultationKey('admin','2026-11','a',doc('new')));assert.notEqual(consultationKey('admin','2026-11','a',doc('old')),consultationKey('other','2026-11','a',doc('old')));
 console.log('PASS surname roster, imported workers without accounts, final priority, replacement chain, rejected documents, month isolation, delegation and consultation isolation');
+
+assert.deepEqual(weeksForMonth('2026-11'),['2026-11-06','2026-11-13','2026-11-20','2026-11-27']);
+assert.equal(weekKey('2026-11-14'),'2026-11-13');assert.equal(weekKey('2026-11-13'),'2026-11-13');assert.equal(weekKey('2026-02-30'),null);
+assert.match(weekLabel('2026-11-13'),/9\/11\/2026.*15\/11\/2026/);
+const weeklyDocs=[doc('w1',{week_ending:'2026-11-06'}),doc('w2',{week_ending:'2026-11-13'}),doc('saturday',{week_ending:'2026-11-14'}),doc('final2',{stage:'final'}),doc('w1-new',{week_ending:'2026-11-06',replaces:'w1',created_at:'2026-11-15'})];
+assert.deepEqual(presenceFiles(weeklyDocs,worker,'2026-11','2026-11-06').map(d=>d.id),['w1-new']);
+assert.deepEqual(presenceFiles(weeklyDocs,worker,'2026-11','2026-11-13').map(d=>d.id),['w2','saturday']);
+assert.deepEqual(presenceFiles(weeklyDocs,worker,'2026-11','final').map(d=>d.id),['final2']);
+assert.equal(presenceFiles(weeklyDocs,worker,'2026-11','2026-11-20').length,0);
+assert.notEqual(consultationKey('admin','2026-11/2026-11-06','a',doc('same')),consultationKey('admin','2026-11/2026-11-13','a',doc('same')));
+console.log('PASS independent weeks, Friday/Saturday alignment, Monday-Sunday labels, weekly replacements, separate monthly final, missing week isolation');
