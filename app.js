@@ -1,4 +1,4 @@
-import {createQuickPresence} from './quick-presence.js?v=144';
+import {createQuickPresence} from './quick-presence.js?v=145';
 import {createDriveOcrPilot} from './drive-ocr-ui.js?v=133';
 import {showDocument} from './document-viewer.js?v=133';
 import {downloadDocument} from './document-download.js?v=133';
@@ -8,7 +8,7 @@ import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
 import {createPresenceConsole} from './presence-ui.js?v=133';
-import './app-version.js?v=144';
+import './app-version.js?v=145';
 import {createColleagueUpload} from './colleague-upload.js?v=69';
 import {createHourBudget} from './hour-budget-ui.js?v=133';
 import {accountSiteLabel,createWorkplaceSelect} from './workplaces.js?v=61';

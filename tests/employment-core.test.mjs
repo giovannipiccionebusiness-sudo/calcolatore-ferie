@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {employmentFor,ceasedBefore,periodStart} from '../employment-core.js';
+const person={id:'account',account_id:'account',person_key:'DUSSMANN:1'},status=[{worker_key:'DUSSMANN:1',person_key:'DUSSMANN:1',last_day:'2026-11-10'}];
+assert.equal(periodStart('2026-11','2026-11-13'),'2026-11-09');
+assert.equal(ceasedBefore(person,status,'2026-11','2026-11-13'),false);
+assert.equal(ceasedBefore(person,status,'2026-11','2026-11-20'),true);
+assert.equal(ceasedBefore(person,status,'2026-11','2026-11-06'),false);
+assert.equal(ceasedBefore(person,status,'2026-11','final'),false);
+assert.equal(ceasedBefore(person,status,'2026-12','final'),true);
+assert.equal(employmentFor(person,status),status[0]);
+assert.equal(ceasedBefore(person,[{...status[0],last_day:'2026-11-09'}],'2026-11','2026-11-13'),false);
+assert.equal(ceasedBefore(person,[{...status[0],last_day:null}],'2026-11','2026-11-20'),false);
+assert.equal(ceasedBefore(person,[],'2026-11','2026-11-20'),false);
+console.log('PASS cessation week included, following weeks excluded, historical/month boundary, account relinking, restoration');
