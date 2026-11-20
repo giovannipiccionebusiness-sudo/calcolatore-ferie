@@ -1,6 +1,7 @@
+import {documentAction,documentStatus} from './document-workflow.js?v=147';
 import {downloadDocument} from './document-download.js?v=133';
 // Private, read-only worker archive. Supabase RLS remains authoritative.
-export function createWorkerArchive({client,getSession,allowed,openFile,typeLabel,stageLabel,statusLabel,renderScan=()=>{},onReset=()=>{},reviewDocument=()=>{}}){
+export function createWorkerArchive({client,getSession,allowed,openFile,typeLabel,stageLabel,statusLabel,renderScan=()=>{},onReset=()=>{},reviewDocument=()=>{},authorizeDocument=()=>{}}){
  const $=id=>document.getElementById(id),pageSize=20;
  let workers=[],selected='',page=0,version=0,loaded=false;
  const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -70,7 +71,11 @@ export function createWorkerArchive({client,getSession,allowed,openFile,typeLabe
    if(type==='weekly')q=q.eq('category','presenze').in('stage',['weekly','replacement']);
    else if(type==='final')q=q.eq('category','presenze').eq('stage','final');
    else if(type)q=q.eq('category',type);
-   if($('archiveStatus').value)q=q.eq('review_status',$('archiveStatus').value);
+   const state=$('archiveStatus').value;
+   if(state==='review')q=q.eq('review_status','pending').not('category','in','(ferie,rol)');
+   else if(state==='authorize')q=q.in('category',['ferie','rol']).eq('authorization','pending').in('review_status',['pending','verified']);
+   else if(['approved','denied'].includes(state))q=q.in('category',['ferie','rol']).eq('authorization',state);
+   else if(state)q=q.eq('review_status',state).not('category','in','(ferie,rol)');
    const {data,error,count}=await q.order('month',{ascending:false}).order('created_at',{ascending:false}).order('id',{ascending:false}).range(page*pageSize,(page+1)*pageSize-1);
    if(token!==version||!allowed())return;
    if(error)throw error;
@@ -86,12 +91,13 @@ export function createWorkerArchive({client,getSession,allowed,openFile,typeLabe
     if(d.week_ending)info.append(el('small','Venerdì '+new Date(d.week_ending+'T12:00:00').toLocaleDateString('it-IT')));
     info.append(el('small','Caricato il '+new Date(d.created_at).toLocaleString('it-IT')));
     if(d.replaces)info.append(el('small','Sostituisce un precedente invio settimanale.'));
-    const state=el('span',statusLabel[d.review_status]||d.review_status,'doc-pill '+(d.review_status==='pending'?'pending':d.review_status==='rejected'?'rejected':''));info.append(state);
+    const state=el('span',documentStatus(d),'doc-pill '+(d.review_status==='pending'?'pending':d.review_status==='rejected'?'rejected':''));info.append(state);
     if(['ferie','rol'].includes(d.category))info.append(el('small',d.authorization==='approved'?'Richiesta autorizzata':d.authorization==='denied'?'Richiesta non autorizzata':'Autorizzazione in attesa'));
     if(d.review_reason)info.append(el('small','Motivo: '+d.review_reason));
     const details=el('details',null,'file-details');details.append(el('summary','Dettagli file'),el('small',d.file_name||'Documento'));info.append(details);
     const b=action('Apri documento',()=>{if(allowed())openFile(d);});b.setAttribute('aria-label','Apri '+(typeLabel[d.category]||'documento')+' del '+new Date(d.created_at).toLocaleDateString('it-IT'));
-    if(d.review_status==='pending'){const controls=el('div',null,'doc-toolbar');controls.append(action('Verifica',()=>reviewDocument(d,'verified')),action('Respingi',()=>reviewDocument(d,'rejected')));info.append(controls);}
+    if(documentAction(d)==='review'){const controls=el('div',null,'doc-toolbar');controls.append(action('Verifica',()=>reviewDocument(d,'verified')),action('Respingi',()=>reviewDocument(d,'rejected')));info.append(controls);}
+    if(documentAction(d)==='authorize'){const controls=el('div',null,'doc-toolbar');controls.append(action('Autorizzare',async()=>{await authorizeDocument(d,'approved');if(allowed())await load();}),action('Non autorizzare',async()=>{await authorizeDocument(d,'denied');if(allowed())await load();}));info.append(controls);}
     row.append(info);area.append(row);renderScan(d,info);
    }
    if(page>0)pager.append(action('← Precedenti',()=>{page--;load();}));

@@ -1,9 +1,10 @@
+import {isAuthorizationRequest,documentAction,documentStatus} from './document-workflow.js?v=147';
 import {createQuickPresence} from './quick-presence.js?v=145';
 import {createDriveOcrPilot} from './drive-ocr-ui.js?v=133';
 import {showDocument} from './document-viewer.js?v=133';
 import {downloadDocument} from './document-download.js?v=133';
 import {createNotificationReport} from './notification-report.js?v=98';
-import {createSupervisor} from './supervisor.js?v=133';
+import {createSupervisor} from './supervisor.js?v=147';
 import {createWeekChanges} from './week-changes.js?v=105';
 import {createDailyPresence} from './daily-presence.js?v=86';
 import {createAdminShifts} from './admin-shifts.js?v=82';
@@ -24,7 +25,7 @@ import {refreshAdminMenu,revealAdminTask,resetAdminMenu,openAdminSection} from '
 import {revealWorkerTarget,refreshWorkerMenu,resetWorkerMenu} from './worker-menu.js?v=71';
 import {appConfirm,appNotice} from './app-dialog.js?v=37';
 import {createMultiPageCapture} from './multipage.js?v=35';
-import {createWorkerArchive} from './archive.js?v=133';
+import {createWorkerArchive} from './archive.js?v=147';
 import {createAutoArchiveScanner} from './auto-scan.js?v=133';
 import {saveUploadDraft,readUploadDraft,deleteUploadDraft} from './upload-draft.js?v=35';
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.10';
@@ -368,12 +369,12 @@ async function openFile(d){
  return popup;
 }
 async function refreshWorker(){if(!profile?.active||profile.role==='admin')return;const {data,error}=await sb.from('documents').select('*').eq('worker_id',session.user.id).eq('month',$('month').value).order('created_at',{ascending:false});if(error){err(error);return}docs=data||[];const area=$('docList');area.replaceChildren();if(!docs.length)area.textContent='Nessun documento per questo mese.';
- for(const d of docs){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${typeLabel[d.category]} · ${stageLabel[d.stage]}`),node('small',`${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||profile?.full_name||'il collega')));if(d.review_reason)left.append(node('small','Motivo: '+d.review_reason));if(d.authorization==='approved')left.append(node('small','Richiesta autorizzata'));if(d.authorization==='denied')left.append(node('small','Richiesta non autorizzata'));row.append(left,button('Apri',()=>openFile(d),true));if(weekChanges.canOpen(d)&&!docs.some(x=>x.replaces===d.id))left.append(button('Supplementare e assenze',()=>weekChanges.open(d).catch(err),true));area.append(row)}
+ for(const d of docs){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${typeLabel[d.category]} · ${stageLabel[d.stage]}`),node('small',`${dateLabel(d.created_at)} · ${documentStatus(d)}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||profile?.full_name||'il collega')));if(d.review_reason)left.append(node('small','Motivo: '+d.review_reason));if(d.authorization==='approved')left.append(node('small','Richiesta autorizzata'));if(d.authorization==='denied')left.append(node('small','Richiesta non autorizzata'));row.append(left,button('Apri',()=>openFile(d),true));if(weekChanges.canOpen(d)&&!docs.some(x=>x.replaces===d.id))left.append(button('Supplementare e assenze',()=>weekChanges.open(d).catch(err),true));area.append(row)}
  const weeks=docs.filter(d=>['weekly','replacement'].includes(d.stage));const finals=docs.filter(d=>d.stage==='final');$('weeklySummary').textContent=`${weeks.length} caricamenti settimanali · ${finals.length? 'Foglio definitivo: '+statusLabel[finals[0].review_status]:'Foglio definitivo non ancora verificato'}`;
  const {data:notes}=await sb.from('notifications').select('*').eq('worker_id',session.user.id).order('created_at',{ascending:false}).limit(30);const n=$('myNotifications');n.replaceChildren();if(!notes?.length)n.textContent='Nessun messaggio.';for(const t of notes||[]){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',t.message),node('small',dateLabel(t.created_at)));row.append(left);if(!t.read_at)row.append(button('Letto',async()=>{await sb.rpc('mark_notification_read',{p_id:t.id});await refreshWorker()},true));n.append(row)}refreshWorkerMenu(docs,notes||[]);}
 $('adminSite').onchange=()=>refreshAdmin();$('adminMonth').onchange=()=>refreshAdmin();$('refreshAdmin').onclick=()=>refreshAdmin();
-async function refreshAdmin(){if(profile?.role!=='admin')return;const [p,d]=await Promise.all([sb.from('profiles').select('*').order('full_name'),sb.from('documents').select('*').eq('month',$('adminMonth').value).order('created_at',{ascending:false})]);if(p.error||d.error){err(p.error||d.error);return}const emailActor=session?.user.id;const emailResult=await sb.rpc('admin_worker_emails');if(profile?.role!=='admin'||session?.user.id!==emailActor)return;const emailMap=new Map((emailResult.data||[]).map(x=>[x.id,x.email]));people=(p.data||[]).map(x=>({...x,login_email:emailMap.get(x.id)||null}));docs=(d.data||[]).filter(x=>!$('adminSite').value||x.site===$('adminSite').value);const active=people.filter(x=>x.active&&x.role==='worker'&&(!$('adminSite').value||x.site===$('adminSite').value));$('adminStats').textContent=`${active.length} lavoratori attivi · ${docs.length} caricamenti nel mese · ${docs.filter(x=>x.review_status==='pending').length} da verificare`;
- const pend=$('pendingDocs'),done=$('reviewedDocs');pend.replaceChildren();done.replaceChildren();for(const d of docs.filter(d=>!docs.some(x=>x.replaces===d.id))){const person=people.find(x=>x.id===d.worker_id),target=d.review_status==='pending'?pend:done,row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${person?.full_name||d.recipient_name||'Lavoratore'} · ${typeLabel[d.category]}`),node('small',`${stageLabel[d.stage]} · ${dateLabel(d.created_at)} · ${statusLabel[d.review_status]}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||person?.full_name||'il collega')));if(d.review_reason)left.append(node('small',d.review_reason));row.append(left);const controls=node('div',null,'doc-toolbar');controls.append(button('Apri',()=>openFile(d),true));if(d.review_status==='pending'){controls.append(button('Verifica',()=>review(d,'verified')),button('Respingi',()=>review(d,'rejected'),true))}else if(d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'){controls.append(button('Autorizza',()=>authorize(d,'approved')),button('Non autorizzare',()=>authorize(d,'denied'),true))}row.dataset.documentId=d.id;row.dataset.adminAction=d.review_status==='pending'?'review':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending'?'authorize':'';row.append(controls);target.append(row)}if(!pend.childNodes.length)pend.textContent='Nessun documento da verificare.';if(!done.childNodes.length)done.textContent='Nessun documento verificato o respinto.';
+async function refreshAdmin(){if(profile?.role!=='admin')return;const [p,d]=await Promise.all([sb.from('profiles').select('*').order('full_name'),sb.from('documents').select('*').eq('month',$('adminMonth').value).order('created_at',{ascending:false})]);if(p.error||d.error){err(p.error||d.error);return}const emailActor=session?.user.id;const emailResult=await sb.rpc('admin_worker_emails');if(profile?.role!=='admin'||session?.user.id!==emailActor)return;const emailMap=new Map((emailResult.data||[]).map(x=>[x.id,x.email]));people=(p.data||[]).map(x=>({...x,login_email:emailMap.get(x.id)||null}));docs=(d.data||[]).filter(x=>!$('adminSite').value||x.site===$('adminSite').value);const active=people.filter(x=>x.active&&x.role==='worker'&&(!$('adminSite').value||x.site===$('adminSite').value));$('adminStats').textContent=`${active.length} lavoratori attivi · ${docs.length} caricamenti nel mese · ${docs.filter(x=>documentAction(x)==='review').length} da verificare · ${docs.filter(x=>documentAction(x)==='authorize').length} da autorizzare`;
+ const pend=$('pendingDocs'),done=$('reviewedDocs');pend.replaceChildren();done.replaceChildren();for(const d of docs.filter(d=>!docs.some(x=>x.replaces===d.id))){const person=people.find(x=>x.id===d.worker_id),target=documentAction(d)==='review'?pend:done,row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',`${person?.full_name||d.recipient_name||'Lavoratore'} · ${typeLabel[d.category]}`),node('small',`${stageLabel[d.stage]} · ${dateLabel(d.created_at)} · ${documentStatus(d)}`));if(d.submitted_name)left.append(node('small','Inviato da '+d.submitted_name+' per '+(d.recipient_name||person?.full_name||'il collega')));if(d.review_reason)left.append(node('small',d.review_reason));row.append(left);const controls=node('div',null,'doc-toolbar');controls.append(button('Apri',()=>openFile(d),true));if(documentAction(d)==='review'){controls.append(button('Verifica',()=>review(d,'verified')),button('Respingi',()=>review(d,'rejected'),true))}else if(documentAction(d)==='authorize'){controls.append(button('Autorizzare',()=>authorize(d,'approved')),button('Non autorizzare',()=>authorize(d,'denied'),true))}row.dataset.documentId=d.id;row.dataset.adminAction=documentAction(d);row.append(controls);target.append(row)}if(!pend.childNodes.length)pend.textContent='Nessun documento da verificare.';if(!done.childNodes.length)done.textContent='Nessun documento verificato o respinto.';
  const users=$('pendingUsers');users.replaceChildren();for(const p of people.filter(x=>!x.active&&x.role==='worker')){const row=node('div',null,'doc-row'),left=node('div');left.append(node('strong',p.full_name||p.id),node('small',p.id));const select=node('select');select.className='doc-select';for(const [v,label] of [['N153','Corte d’Appello'],['N148','ENAV'],['N154','N154 - Acquedotto Pugliese']]){const opt=node('option',label);opt.value=v;select.append(opt)}const ctl=node('div');ctl.append(select,button('Abilita',async()=>{if(!confirm('Abilitare questo lavoratore per '+select.value+'?'))return;const {error}=await sb.from('profiles').update({active:true,site:select.value}).eq('id',p.id);if(error)err(error);else refreshAdmin()}));row.append(left,ctl);users.append(row)}if(!users.childNodes.length)users.textContent='Nessuna richiesta di registrazione in sospeso.'}
 async function addNotification(worker_id,kind,message,week_ending=null){return sb.from('notifications').insert({worker_id,kind,message,week_ending,created_by:session.user.id})}
 
@@ -391,7 +392,8 @@ function documentMessage(d,event,status,reason=''){
  if(event==='authorization'){
   const name=d.category==='ferie'?'Le ferie richieste':'I permessi ROL richiesti';
   text=status==='approved'?name+' sono stati autorizzati dal responsabile.':name+' non sono stati autorizzati dal responsabile.';
-  if(d.category==='ferie')text=status==='approved'?'Le ferie richieste sono state autorizzate dal responsabile.':'Le ferie richieste non sono state autorizzate dal responsabile.';
+  if(reason)text+=' Motivo: '+reason;
+
  }else text=status==='verified'?(viewed[d.category]||'Il documento è stato visionato dal responsabile.'):(names[d.category]||'Il documento')+' — documento respinto dal responsabile. Motivo: '+reason;
  const month=/^\d{4}-\d{2}$/.test(d.month||'')?d.month.slice(5,7)+'/'+d.month.slice(0,4):'';
  const week=/^\d{4}-\d{2}-\d{2}$/.test(d.week_ending||'')?d.week_ending.slice(8,10)+'/'+d.week_ending.slice(5,7)+'/'+d.week_ending.slice(0,4):'';
@@ -412,7 +414,21 @@ async function review(d,status){
   await refreshAdmin();msg((status==='verified'?'Documento verificato: ':'Documento respinto: ')+label+(r.error?' · Messaggio al lavoratore non inviato.':''));
  }catch(e){err(e)}finally{reviewing.delete(d.id)}
 }
-async function authorize(d,status){if(!confirm(status==='approved'?'Autorizzare la richiesta?':'Non autorizzare la richiesta?'))return;const {error}=await sb.from('documents').update({authorization:status,authorized_at:new Date().toISOString()}).eq('id',d.id);if(error){err(error);return}const r=d.worker_id&&!d.submitted_name?await addNotification(d.worker_id,'authorization',documentMessage(d,'authorization',status)):{error:null};if(r.error)err(r.error);await refreshAdmin()}
+const authorizing=new Set();
+async function authorize(d,status){
+ if(authorizing.has(d.id)||!isAuthorizationRequest(d)||!['approved','denied'].includes(status))return;
+ if(!confirm(status==='approved'?'Autorizzare la richiesta?':'Non autorizzare la richiesta?'))return;
+ let reason=null;if(status==='denied'){reason=prompt('Motivo della mancata autorizzazione (obbligatorio):');if(!reason?.trim())return;reason=reason.trim();if(reason.length>250){msg('La motivazione può contenere al massimo 250 caratteri.');return;}}
+ authorizing.add(d.id);msg('Salvataggio autorizzazione…');
+ try{
+  const changes={review_status:'verified',authorization:status,authorized_at:new Date().toISOString()};if(reason)changes.review_reason=reason;
+  const {data,error}=await sb.from('documents').update(changes).eq('id',d.id).eq('authorization','pending').in('review_status',['pending','verified']).select('id,authorization').single();
+  if(error)throw error;if(data?.id!==d.id||data.authorization!==status)throw Error('Autorizzazione non salvata. Aggiorna e riprova.');
+  const r=d.worker_id&&!d.submitted_name?await addNotification(d.worker_id,'authorization',documentMessage(d,'authorization',status,reason)):{error:null};
+  await refreshAdmin();await notificationCenter.refresh(true);msg((status==='approved'?'Richiesta autorizzata.':'Richiesta non autorizzata.')+(r.error?' · Messaggio al lavoratore non inviato.':''));
+ }catch(e){err(e)}finally{authorizing.delete(d.id)}
+}
+
 function renderWorkerWeekChoices(){
  const selected=$('workerWeek').value;
  const choice=$('workerWeekChoice');
@@ -602,7 +618,7 @@ const refreshAdminCompact=refreshAdmin;
 refreshAdmin=async function(){
  await refreshAdminCompact();
  if(profile?.role!=='admin'||!profile.active)return;
- compactList($('reviewedDocs'),'Documenti verificati e richieste',{initialOpen:docs.some(d=>d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending')});
+ compactList($('reviewedDocs'),'Richieste da autorizzare e documenti gestiti',{initialOpen:docs.some(d=>documentAction(d)==='authorize')});
  compactList($('auditList'),'Storico delle operazioni');
  compactList($('pendingDocs'),'Documenti da verificare',{collapsible:false});
 };
@@ -618,7 +634,7 @@ async function monthlyStatus(action,document_id){
 const adminAllowed=()=>!!session&&profile?.role==='admin'&&profile.active;
 const automaticScans=createAutoArchiveScanner({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openOriginal:previewArchiveOriginal,monthlyStatus,documentScanStatus,onMonthClosed:()=>refreshAdmin().then(()=>$('archiveRefresh').click()).catch(err)});
 const quickPresence=createQuickPresence({client:()=>sb,getSession:()=>session,allowed:adminAllowed,onReconnect:()=>reconnectDrive()});
-const archive=createWorkerArchive({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review});
+const archive=createWorkerArchive({client:()=>sb,getSession:()=>session,allowed:adminAllowed,openFile,typeLabel,stageLabel,statusLabel,renderScan:automaticScans.render,onReset:automaticScans.clear,reviewDocument:review,authorizeDocument:authorize});
 const refreshAdminArchive=refreshAdmin;
 refreshAdmin=async function(){await refreshAdminArchive();if(adminAllowed()){await archive.setWorkers(people);quickPresence.setWorkers(people);if(adminAllowed()){refreshAdminMenu();adminMessages.refresh(people);notificationCenter.refresh(true);}}};
 const multiPage=createMultiPageCapture({allowed:worker=>!!session&&session.user.id===worker&&profile?.active&&profile.role==='worker',onSubmit:async(file,selected)=>{if(pendingDraft){renderUploadRecovery();throw Error('Riprendi o elimina prima l’invio già pronto.');}await acceptUploadFile(file,{...selected,note:$('docNote').value.trim()});if(pendingDraft)throw Error('Riprendi l’invio dal riquadro di recupero.');}});
@@ -667,7 +683,8 @@ async function openNotificationEvent(eventKey){
  const table=kind==='registration'?'profiles':'documents';
  const {data,error}=await sb.from(table).select('*').eq('id',match[2]).maybeSingle();
  if(error)throw error;if(!data)throw Error('L’elemento non è più disponibile.');
- await openAdminNotificationTask({task_kind:kind,target_id:data.id,month:data.month,site:data.site});
+ const currentKind=kind==='registration'?kind:documentAction(data)==='authorize'?'authorization':kind;
+ await openAdminNotificationTask({task_kind:currentKind,target_id:data.id,month:data.month,site:data.site});
  return true;
 }
 document.addEventListener('presence-record-saved',()=>notificationCenter.refresh(true));
@@ -696,8 +713,8 @@ async function openAdminNotificationTask(task){
    if(popup?.open){
     const bar=popup.querySelector('nav');
     const add=(label,action)=>{const control=button(label,async()=>{control.disabled=true;try{await action();popup.close();await notificationCenter.refresh(true);}finally{control.disabled=false;}},true);bar.append(control);};
-    if(document.review_status==='pending'){add('Verifica',()=>review(document,'verified'));add('Respingi',()=>review(document,'rejected'));}
-    else if(document.review_status==='verified'&&['ferie','rol'].includes(document.category)&&document.authorization==='pending'){add('Autorizza',()=>authorize(document,'approved'));add('Non autorizzare',()=>authorize(document,'denied'));}
+    if(documentAction(document)==='review'){add('Verifica',()=>review(document,'verified'));add('Respingi',()=>review(document,'rejected'));}
+    else if(documentAction(document)==='authorize'){add('Autorizzare',()=>authorize(document,'approved'));add('Non autorizzare',()=>authorize(document,'denied'));}
    }
    await notificationCenter.markTaskRead(task);
    return;

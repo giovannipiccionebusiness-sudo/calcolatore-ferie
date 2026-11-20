@@ -41,7 +41,7 @@ async function stillNeeded(item:any,sub:any){
   if(item.kind==='admin_registration'){const {data:r,error:e}=await db.from('profiles').select('active,role').eq('id',id).maybeSingle();if(e)throw e;return !!r&&!r.active&&r.role==='worker';}
   const [{data:d,error:de},{data:replaced,error:re}]=await Promise.all([db.from('documents').select('review_status,category,authorization').eq('id',id).maybeSingle(),db.from('documents').select('id').eq('replaces',id).limit(1)]);
   if(de||re)throw de||re;if(!d||replaced?.length)return false;
-  return item.kind==='admin_review'?d.review_status==='pending':d.review_status==='verified'&&['ferie','rol'].includes(d.category)&&d.authorization==='pending';
+  return item.kind==='admin_review'?!['ferie','rol'].includes(d.category)&&d.review_status==='pending':['pending','verified'].includes(d.review_status)&&['ferie','rol'].includes(d.category)&&d.authorization==='pending';
  }
  if(!p.active||p.role!=='worker')return false;
  if(['colleague_upload','colleague_review','colleague_authorization'].includes(item.kind))return sub.app_scope==='production';
